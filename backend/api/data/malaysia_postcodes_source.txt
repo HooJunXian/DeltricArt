@@ -1,0 +1,5 @@
+Source: https://github.com/atqnp/postcode-malaysia
+Raw file used: https://raw.githubusercontent.com/atqnp/postcode-malaysia/master/postcode/postcode_my.csv
+
+The bundled malaysia_postcodes.csv is reduced from the source CSV to unique
+postcode, post office/city, state, and country code rows for application lookup.

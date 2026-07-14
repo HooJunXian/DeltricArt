@@ -1,0 +1,101 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=Prata&display=swap');
+
+@import "tailwindcss";
+
+a.active hr {
+    display: block;
+}
+
+* {
+    font-family: Outfit;
+}
+
+html, body {
+  margin: 0;
+  overflow-x: clip;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+}
+
+.prata-regular {
+  font-family: "Prata", serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+@keyframes testimonial-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.testimonial-marquee {
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 8%,
+    #000 92%,
+    transparent
+  );
+}
+
+.testimonial-marquee-track {
+  animation: testimonial-marquee 32s linear infinite;
+}
+
+.testimonial-marquee:hover .testimonial-marquee-track {
+  animation-play-state: paused;
+}
+
+.price-range-input {
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  height: 28px;
+}
+
+.price-range-input::-webkit-slider-runnable-track {
+  background: transparent;
+  border: 0;
+  height: 4px;
+}
+
+.price-range-input::-webkit-slider-thumb {
+  pointer-events: auto;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #1c1917;
+  border: 2px solid #fff;
+  border-radius: 9999px;
+  box-shadow: 0 1px 4px rgba(28, 25, 23, 0.25);
+  cursor: pointer;
+  height: 16px;
+  margin-top: -6px;
+  width: 16px;
+}
+
+.price-range-input::-moz-range-track {
+  background: transparent;
+  border: 0;
+  height: 4px;
+}
+
+.price-range-input::-moz-range-thumb {
+  pointer-events: auto;
+  background: #1c1917;
+  border: 2px solid #fff;
+  border-radius: 9999px;
+  box-shadow: 0 1px 4px rgba(28, 25, 23, 0.25);
+  cursor: pointer;
+  height: 16px;
+  width: 16px;
+}
