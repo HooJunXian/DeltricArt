@@ -1,7 +1,7 @@
 import React, { useContext, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { assets } from "../assets/assets";
-import { ShopContext } from "../customer/context/shop-context";
+import { assets } from "../../assets/assets";
+import { ShopContext } from "../context/shop-context";
 
 const Products = () => {
   const { products, productsLoading, productsError, formatMoney, addToCart, showToast } =
@@ -327,3 +327,4 @@ const Products = () => {
 };
 
 export default Products;
+

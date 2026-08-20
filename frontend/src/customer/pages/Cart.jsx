@@ -1,8 +1,8 @@
 import React, { useContext } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
-import { assets } from "../assets/assets";
-import { ShopContext } from "../customer/context/shop-context";
+import { assets } from "../../assets/assets";
+import { ShopContext } from "../context/shop-context";
 
 const Cart = () => {
   const {
@@ -214,3 +214,4 @@ const Cart = () => {
 };
 
 export default Cart;
+

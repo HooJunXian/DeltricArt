@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { assets } from "../assets/assets";
+import { assets } from "../../assets/assets";
 
 const customerGroups = [
   "Interior designers",
@@ -297,3 +297,4 @@ const About = () => {
 };
 
 export default About;
+

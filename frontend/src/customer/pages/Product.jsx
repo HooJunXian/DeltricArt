@@ -1,8 +1,8 @@
 import React, { useContext, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Search } from "lucide-react";
-import { assets } from "../assets/assets";
-import { ShopContext } from "../customer/context/shop-context";
+import { assets } from "../../assets/assets";
+import { ShopContext } from "../context/shop-context";
 
 const Product = () => {
   const { productId } = useParams();
@@ -297,3 +297,4 @@ const Product = () => {
 };
 
 export default Product;
+
