@@ -8,9 +8,9 @@ import {
   Store,
   Truck,
 } from "lucide-react";
-import billPlzLogo from "../assets/BillPlz_logo.png";
-import api from "../api";
-import { ShopContext } from "../customer/context/shop-context";
+import billPlzLogo from "../../assets/BillPlz_logo.png";
+import api from "../../api";
+import { ShopContext } from "../context/shop-context";
 
 const fulfillmentMethods = [
   {
@@ -869,3 +869,4 @@ const PlaceOrder = () => {
 };
 
 export default PlaceOrder;
+

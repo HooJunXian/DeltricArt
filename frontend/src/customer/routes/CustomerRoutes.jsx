@@ -1,14 +1,14 @@
 import React from "react";
 import { Navigate, Route } from "react-router-dom";
 
-import About from "../../pages/About";
-import Cart from "../../pages/Cart";
-import Contact from "../../pages/Contact";
-import Home from "../../pages/Home";
-import MyPurchase from "../../pages/MyPurchase";
-import PlaceOrder from "../../pages/PlaceOrder";
-import Product from "../../pages/Product";
-import Products from "../../pages/Products";
+import About from "../pages/About";
+import Cart from "../pages/Cart";
+import Contact from "../pages/Contact";
+import Home from "../pages/Home";
+import MyPurchase from "../pages/MyPurchase";
+import PlaceOrder from "../pages/PlaceOrder";
+import Product from "../pages/Product";
+import Products from "../pages/Products";
 import StorefrontLayout from "../layouts/StorefrontLayout";
 
 const CustomerRoutes = () => (
@@ -37,3 +37,4 @@ const CustomerRoutes = () => (
 );
 
 export default CustomerRoutes;
+

@@ -4,63 +4,14 @@ import api from "../../api";
 import ToastAlert from "../../components/ToastAlert";
 import { ACCESS_TOKEN, REFRESH_TOKEN } from "../../constants";
 import MemberAuthModal from "../components/MemberAuthModal";
+import {
+  BASE_DELIVERY_FEE,
+  formatCurrencyNumber,
+  normalizeCurrencySettings,
+  roundMoney,
+} from "../utils/currency";
+import { normalizeProduct } from "../utils/product";
 import { ShopContext } from "./shop-context";
-
-const DEFAULT_CURRENCY_SETTINGS = {
-  countryCode: "MY",
-  code: "MYR",
-  symbol: "RM",
-  rate: 1,
-};
-
-const BASE_DELIVERY_FEE = 10;
-
-const roundMoney = (amount) => Math.round((Number(amount || 0) + Number.EPSILON) * 100) / 100;
-
-const formatCurrencyNumber = (amount) =>
-  new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(amount || 0));
-
-const normalizeCurrencySettings = (currency) => {
-  const rate = Number(currency?.exchange_rate);
-
-  if (!currency?.currency_symbol || Number.isNaN(rate) || rate <= 0) {
-    return DEFAULT_CURRENCY_SETTINGS;
-  }
-
-  return {
-    countryCode: currency.country_code || DEFAULT_CURRENCY_SETTINGS.countryCode,
-    code: currency.currency_code || DEFAULT_CURRENCY_SETTINGS.code,
-    symbol: currency.currency_symbol,
-    rate,
-  };
-};
-
-const normalizeProduct = (product) => {
-  const images = product.images?.length
-    ? product.images
-    : product.image
-      ? [product.image]
-      : [];
-  const category = product.category_parent_name || product.category_name || "Uncategorized";
-
-  return {
-    ...product,
-    _id: String(product._id || product.id),
-    basePrice: Number(product.price || 0),
-    price: Number(product.price || 0),
-    image: images,
-    category,
-    subCategory: product.category_parent_name
-      ? product.category_name
-      : product.subCategory || product.category_name || category,
-    sizes: product.sizes?.length ? product.sizes : ["Original"],
-    date: Number(product.date || Date.parse(product.created_at) || 0),
-    bestseller: Boolean(product.bestseller),
-  };
-};
 
 const ShopContextProvider = (props) => {
   const [products, setProducts] = useState([]);
@@ -388,3 +339,4 @@ const ShopContextProvider = (props) => {
 };
 
 export default ShopContextProvider;
+

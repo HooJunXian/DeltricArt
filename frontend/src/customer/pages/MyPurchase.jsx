@@ -12,10 +12,10 @@ import {
   Truck,
   UserRound,
 } from "lucide-react";
-import api from "../api";
-import failedImage from "../assets/failed.png";
-import successImage from "../assets/success.png";
-import { ShopContext } from "../customer/context/shop-context";
+import api from "../../api";
+import failedImage from "../../assets/failed.png";
+import successImage from "../../assets/success.png";
+import { ShopContext } from "../context/shop-context";
 
 const formatOrderMoney = (order, amount) => {
   const numeric = Number(amount || 0);
@@ -97,10 +97,10 @@ const getReceiptState = (order) => {
   };
 };
 
-const DetailRow = ({ icon: Icon, label, value }) => (
+const DetailRow = ({ icon, label, value }) => (
   <div className="flex gap-3 text-sm">
     <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-700">
-      <Icon className="h-4 w-4" strokeWidth={1.8} />
+      {React.createElement(icon, { className: "h-4 w-4", strokeWidth: 1.8 })}
     </span>
     <span className="min-w-0">
       <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">
@@ -124,67 +124,53 @@ const MyPurchase = () => {
 
   useEffect(() => {
     let ignore = false;
-    setLoading(true);
-    setError("");
-    setOrder(null);
 
-    if (!orderNumber) {
-      api
-        .get("/api/orders/")
-        .then((response) => {
+    const loadOrders = async () => {
+      setLoading(true);
+      setError("");
+      setOrder(null);
+
+      try {
+        if (!orderNumber) {
+          const response = await api.get("/api/orders/");
           if (!ignore) setOrders(response.data || []);
-        })
-        .catch((requestError) => {
-          if (ignore) return;
-          const status = requestError.response?.status;
-          const message =
-            status === 401
-              ? "Please login again to view your purchase history."
-              : requestError.response?.data?.detail || "Unable to load your purchase history.";
-          setError(message);
-          showToast({
-            type: "error",
-            title: status === 401 ? "Login expired" : "Purchases not loaded",
-            message,
-          });
-          if (status === 401) {
-            openAuthModal("login");
-          }
-        })
-        .finally(() => {
-          if (!ignore) setLoading(false);
-        });
+          return;
+        }
 
-      return () => {
-        ignore = true;
-      };
-    }
-
-    api
-      .get(`/api/orders/${orderNumber}/`)
-      .then((response) => {
+        const response = await api.get(`/api/orders/${orderNumber}/`);
         if (!ignore) setOrder(response.data);
-      })
-      .catch((requestError) => {
+      } catch (requestError) {
         if (ignore) return;
         const status = requestError.response?.status;
-        const message =
-          status === 401
+        const message = orderNumber
+          ? status === 401
             ? "Please login again to view this receipt."
-            : requestError.response?.data?.detail || "Unable to load this receipt.";
+            : requestError.response?.data?.detail || "Unable to load this receipt."
+          : status === 401
+            ? "Please login again to view your purchase history."
+            : requestError.response?.data?.detail || "Unable to load your purchase history.";
+        const title =
+          status === 401
+            ? "Login expired"
+            : orderNumber
+              ? "Receipt not loaded"
+              : "Purchases not loaded";
+
         setError(message);
         showToast({
           type: "error",
-          title: status === 401 ? "Login expired" : "Receipt not loaded",
+          title,
           message,
         });
         if (status === 401) {
           openAuthModal("login");
         }
-      })
-      .finally(() => {
+      } finally {
         if (!ignore) setLoading(false);
-      });
+      }
+    };
+
+    loadOrders();
 
     return () => {
       ignore = true;
@@ -517,3 +503,4 @@ const MyPurchase = () => {
 };
 
 export default MyPurchase;
+
