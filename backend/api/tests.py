@@ -13,6 +13,8 @@ from rest_framework.test import APIClient
 
 from .models import (
     Cart,
+    ChatbotConversation,
+    ChatbotMessage,
     Company,
     Country,
     Order,
@@ -876,3 +878,183 @@ class LoginApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+
+class ChatbotApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="chatbotuser",
+            email="chatbotuser@example.com",
+            password="Secret123!",
+        )
+        self.staff_user = User.objects.create_user(
+            username="chatbotstaff",
+            email="chatbotstaff@example.com",
+            password="Secret123!",
+            is_staff=True,
+        )
+        self.category = ProductCategory.objects.create(
+            name="Painting",
+            created_by=self.staff_user,
+        )
+        now = timezone.now()
+        self.product = Product.objects.create(
+            code="ART-CHAT-001",
+            name="Living Room Oil Painting",
+            description="Warm oil painting suitable for living room decoration.",
+            price=Decimal("280.00"),
+            stock_balance=2,
+            category=self.category,
+            is_show=True,
+            show_date_start=now,
+            show_date_end=now + timedelta(days=365),
+            created_by=self.staff_user,
+        )
+
+    def test_chatbot_requires_authenticated_user(self):
+        response = self.client.post(
+            "/api/chatbot/",
+            {"message": "show me products"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    @patch("api.views.chatbot.ask_ollama")
+    def test_chatbot_returns_ai_reply_and_matching_products(self, ask_ollama_mock):
+        ask_ollama_mock.return_value = "Living Room Oil Painting 适合客厅，也符合 RM300 以下的预算。"
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            "/api/chatbot/",
+            {"message": "推荐 RM300 以下适合客厅的画"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["reply"], ask_ollama_mock.return_value)
+        self.assertIn("conversation_id", response.data)
+        self.assertEqual(len(response.data["products"]), 1)
+        self.assertEqual(response.data["products"][0]["id"], self.product.id)
+        conversation = ChatbotConversation.objects.get(id=response.data["conversation_id"])
+        messages = list(conversation.messages.order_by("id"))
+        self.assertEqual(len(messages), 2)
+        self.assertEqual(messages[0].role, ChatbotMessage.ROLE_USER)
+        self.assertEqual(messages[0].content, "推荐 RM300 以下适合客厅的画")
+        self.assertEqual(messages[1].role, ChatbotMessage.ROLE_ASSISTANT)
+        self.assertEqual(messages[1].content, ask_ollama_mock.return_value)
+        self.assertEqual(messages[1].products_snapshot[0]["id"], self.product.id)
+
+    @patch("api.views.chatbot.ask_ollama")
+    def test_chatbot_only_returns_product_cards_mentioned_in_reply(self, ask_ollama_mock):
+        extra_product = Product.objects.create(
+            code="ART-CHAT-002",
+            name="Lonely",
+            description="Figurative oil painting.",
+            price=Decimal("750.00"),
+            stock_balance=3,
+            category=self.category,
+            is_show=True,
+            show_date_start=timezone.now(),
+            show_date_end=timezone.now() + timedelta(days=365),
+            created_by=self.staff_user,
+        )
+        ask_ollama_mock.return_value = "I recommend Living Room Oil Painting for this room."
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            "/api/chatbot/",
+            {"message": "recommend painting"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [product["id"] for product in response.data["products"]],
+            [self.product.id],
+        )
+        self.assertNotIn(extra_product.id, [product["id"] for product in response.data["products"]])
+
+    @patch("api.views.chatbot.ask_ollama")
+    def test_chatbot_greeting_does_not_return_products(self, ask_ollama_mock):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            "/api/chatbot/",
+            {"message": "hi"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("DeltricArt", response.data["reply"])
+        self.assertEqual(response.data["products"], [])
+        ask_ollama_mock.assert_not_called()
+        self.assertEqual(ChatbotMessage.objects.count(), 2)
+
+    @patch("api.views.chatbot.ask_ollama")
+    def test_chatbot_accepts_style_follow_up_requests(self, ask_ollama_mock):
+        ask_ollama_mock.return_value = "现代简约风格可以考虑线条干净、色彩克制的作品。"
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            "/api/chatbot/",
+            {"message": "现代简约"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["reply"], ask_ollama_mock.return_value)
+        ask_ollama_mock.assert_called_once()
+
+    @patch("api.views.chatbot.ask_ollama", side_effect=RuntimeError("Unable to reach Ollama."))
+    def test_chatbot_returns_service_error_when_ollama_is_unavailable(self, _ask_ollama_mock):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            "/api/chatbot/",
+            {"message": "show me products"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.data["detail"],
+            "AI assistant is temporarily unavailable. Please try again later.",
+        )
+        assistant_message = ChatbotMessage.objects.filter(
+            role=ChatbotMessage.ROLE_ASSISTANT
+        ).latest("id")
+        self.assertEqual(assistant_message.metadata["error"], "ai_unavailable")
+
+    @patch("api.views.chatbot.ask_ollama")
+    def test_chatbot_rejects_out_of_scope_request_without_calling_ollama(self, ask_ollama_mock):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            "/api/chatbot/",
+            {"message": "Can you write Python code for my homework?"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("outside the scope", response.data["reply"])
+        self.assertEqual(response.data["products"], [])
+        ask_ollama_mock.assert_not_called()
+        self.assertEqual(ChatbotMessage.objects.count(), 2)
+
+    @patch("api.views.chatbot.ask_ollama")
+    def test_chatbot_rejects_chinese_out_of_scope_request_without_calling_ollama(self, ask_ollama_mock):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            "/api/chatbot/",
+            {"message": "你可以帮我写投资建议吗？"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("不在 DeltricArt AI 购物助手的能力范围", response.data["reply"])
+        self.assertEqual(response.data["products"], [])
+        ask_ollama_mock.assert_not_called()
+        self.assertEqual(ChatbotMessage.objects.count(), 2)

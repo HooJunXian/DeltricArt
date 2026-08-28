@@ -1,6 +1,7 @@
 import React from "react";
 import { Outlet } from "react-router-dom";
 
+import ChatbotPanel from "../components/ChatbotPanel";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 
@@ -12,6 +13,7 @@ const StorefrontLayout = () => {
         <Outlet />
       </div>
       <Footer />
+      <ChatbotPanel />
     </>
   );
 };

@@ -3,6 +3,7 @@ from .admin import AdminCategoryViewSet, AdminDashboardView, AdminProductViewSet
 from .auth import CreateUserView, RegisterView
 from .cart import CartDetailView, CartItemAddView, CartItemDetailView, get_active_cart
 from .catalog import CustomerProductListView
+from .chatbot import ChatbotView
 from .checkout import (
     CheckoutView,
     OrderCancelView,
