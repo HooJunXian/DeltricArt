@@ -549,3 +549,53 @@ class BillplzEvent(models.Model):
 
     def __str__(self):
         return f"{self.provider} {self.event_type} {self.gateway_reference}"
+
+
+class ChatbotConversation(models.Model):
+    id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="chatbot_conversations",
+    )
+    title = models.CharField(max_length=120, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "chatbot_conversations"
+        ordering = ["-updated_at", "-id"]
+
+    def __str__(self):
+        return self.title or f"{self.user} chatbot conversation {self.id}"
+
+
+class ChatbotMessage(models.Model):
+    ROLE_USER = "user"
+    ROLE_ASSISTANT = "assistant"
+
+    ROLE_CHOICES = [
+        (ROLE_USER, "User"),
+        (ROLE_ASSISTANT, "Assistant"),
+    ]
+
+    id = models.AutoField(primary_key=True)
+    conversation = models.ForeignKey(
+        ChatbotConversation,
+        on_delete=models.CASCADE,
+        related_name="messages",
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    content = models.TextField()
+    intent = models.CharField(max_length=80, blank=True)
+    is_out_of_scope = models.BooleanField(default=False)
+    products_snapshot = models.JSONField(default=list, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "chatbot_messages"
+        ordering = ["created_at", "id"]
+
+    def __str__(self):
+        return f"{self.role} message in conversation {self.conversation_id}"

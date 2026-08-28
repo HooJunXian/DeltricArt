@@ -39,6 +39,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_THROTTLE_RATES": {
+        "chatbot": os.getenv("CHATBOT_THROTTLE_RATE", "20/minute"),
+    },
 }
 
 SIMPLE_JWT = {
@@ -172,6 +175,10 @@ BILLPLZ_API_KEY = os.getenv("BILLPLZ_API_KEY", "")
 BILLPLZ_COLLECTION_ID = os.getenv("BILLPLZ_COLLECTION_ID", "")
 BILLPLZ_X_SIGNATURE_KEY = os.getenv("BILLPLZ_X_SIGNATURE_KEY", "")
 BILLPLZ_BASE_URL = os.getenv("BILLPLZ_BASE_URL", "https://www.billplz-sandbox.com/api/v3")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "60"))
+CHATBOT_THROTTLE_RATE = os.getenv("CHATBOT_THROTTLE_RATE", "20/minute")
 
 
 CSRF_TRUSTED_ORIGINS = [
