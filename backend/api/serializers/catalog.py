@@ -123,6 +123,9 @@ class AdminProductSerializer(serializers.ModelSerializer):
     category_parent_name = serializers.CharField(source="category.parent.name", read_only=True)
     category_path = serializers.SerializerMethodField()
     images = serializers.SerializerMethodField()
+    width_cm = serializers.DecimalField(max_digits=8, decimal_places=2, allow_null=True, required=False)
+    height_cm = serializers.DecimalField(max_digits=8, decimal_places=2, allow_null=True, required=False)
+    length_cm = serializers.DecimalField(max_digits=8, decimal_places=2, allow_null=True, required=False)
 
     class Meta:
         model = Product
@@ -138,6 +141,9 @@ class AdminProductSerializer(serializers.ModelSerializer):
             "description",
             "price",
             "stock_balance",
+            "width_cm",
+            "height_cm",
+            "length_cm",
             "image",
             "images",
             "active",
@@ -208,6 +214,9 @@ class CustomerProductSerializer(AdminProductSerializer):
             "description",
             "price",
             "stock_balance",
+            "width_cm",
+            "height_cm",
+            "length_cm",
             "image",
             "images",
             "sizes",

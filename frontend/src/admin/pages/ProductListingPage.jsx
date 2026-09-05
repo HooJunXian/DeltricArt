@@ -32,6 +32,16 @@ const defaultFilters = {
   active: "",
 };
 
+const formatDimensions = (product) => {
+  const dimensions = [
+    product.width_cm ? `W ${Number(product.width_cm).toFixed(2)} cm` : "",
+    product.height_cm ? `H ${Number(product.height_cm).toFixed(2)} cm` : "",
+    product.length_cm ? `L ${Number(product.length_cm).toFixed(2)} cm` : "",
+  ].filter(Boolean);
+
+  return dimensions.length ? dimensions.join(" x ") : "-";
+};
+
 const ProductListingPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -166,6 +176,15 @@ const ProductListingPage = () => {
         key: "stock_balance",
         label: "Stock Balance",
         sortValue: (product) => Number(product.stock_balance || 0),
+      },
+      {
+        key: "dimensions",
+        label: "Dimensions",
+        sortValue: (product) =>
+          [product.width_cm, product.height_cm, product.length_cm]
+            .map((value) => Number(value || 0).toFixed(2))
+            .join("-"),
+        render: formatDimensions,
       },
       {
         key: "active",
@@ -313,7 +332,7 @@ const ProductListingPage = () => {
             loading={loading}
             loadingText="Loading products..."
             emptyText="No products match the current filters."
-            minWidth="1080px"
+            minWidth="1200px"
             getRowKey={(product) => product.id}
           />
         </div>

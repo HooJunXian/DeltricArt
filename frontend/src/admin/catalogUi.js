@@ -12,6 +12,9 @@ export const emptyProduct = {
   description: "",
   price: "",
   stock_balance: "",
+  width_cm: "",
+  height_cm: "",
+  length_cm: "",
   image: "",
   active: true,
 };

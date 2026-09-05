@@ -60,7 +60,7 @@ CAPABILITY_DOCUMENTS = [
         "content": (
             "The assistant can compare products only when the products are present in "
             "the product context. Comparison should focus on price, category, stock, "
-            "description, scenario fit, and suitability."
+            "dimensions, description, scenario fit, and suitability."
         ),
     },
     {
@@ -110,10 +110,10 @@ CAPABILITY_DOCUMENTS = [
     {
         "id": "product_qa",
         "title": "Product Q&A",
-        "keywords": ["stock", "available", "price", "category", "description", "suitable", "库存", "價格", "价格", "适合", "適合", "分类", "分類"],
+        "keywords": ["stock", "available", "price", "category", "description", "dimension", "size", "width", "height", "length", "suitable", "库存", "價格", "价格", "尺寸", "宽", "寬", "高", "长", "長", "适合", "適合", "分类", "分類"],
         "content": (
             "The assistant can answer product questions only from product context, "
-            "including stock, price, category, code, and description."
+            "including stock, price, category, code, dimensions, and description."
         ),
     },
     {

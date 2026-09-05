@@ -19,7 +19,7 @@ const welcomeMessage = {
 };
 
 const ChatbotPanel = () => {
-  const { authLoading, formatMoney, user } = useContext(ShopContext);
+  const { formatMoney } = useContext(ShopContext);
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,10 +29,6 @@ const ChatbotPanel = () => {
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, loading, isOpen]);
-
-  if (authLoading || !user) {
-    return null;
-  }
 
   const submitMessage = async (messageText = input) => {
     const nextMessage = messageText.trim();

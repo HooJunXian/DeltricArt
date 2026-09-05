@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Image as ImageIcon, PackagePlus, Plus, Save, Star, Upload, X } from "lucide-react";
+import { ArrowLeft, Image as ImageIcon, PackagePlus, Plus, Save, Star, Trash2, Upload } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import api from "../../api";
@@ -27,6 +27,7 @@ const ProductFormPage = () => {
   const [selectedMainCategory, setSelectedMainCategory] = useState("");
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
+  const [removedImageUrls, setRemovedImageUrls] = useState([]);
   const imagePreviewsRef = useRef([]);
   const fileInputRef = useRef(null);
 
@@ -77,6 +78,9 @@ const ProductFormPage = () => {
           description: product.description || "",
           price: product.price,
           stock_balance: product.stock_balance,
+          width_cm: product.width_cm || "",
+          height_cm: product.height_cm || "",
+          length_cm: product.length_cm || "",
           image: product.image || "",
           active: product.active,
         });
@@ -90,6 +94,7 @@ const ProductFormPage = () => {
             }),
           ),
         );
+        setRemovedImageUrls([]);
       }
     } catch (err) {
       setToast({
@@ -143,16 +148,24 @@ const ProductFormPage = () => {
     );
   };
 
-  const clearSelectedImages = () => {
-    imagePreviews.forEach((preview) => {
-      if (!preview.existing) {
-        URL.revokeObjectURL(preview.url);
-      }
-    });
-    setImageFiles([]);
-    setImagePreviews([]);
-    setForm((current) => ({ ...current, image: "" }));
-    if (fileInputRef.current) {
+  const removeImage = (selectedIndex) => {
+    const selectedPreview = imagePreviews[selectedIndex];
+    if (!selectedPreview) return;
+
+    if (selectedPreview.existing) {
+      setRemovedImageUrls((current) =>
+        current.includes(selectedPreview.url) ? current : [...current, selectedPreview.url],
+      );
+    } else {
+      URL.revokeObjectURL(selectedPreview.url);
+      setImageFiles((current) => current.filter((_, index) => index !== selectedIndex));
+    }
+
+    const remainingPreviews = imagePreviews.filter((_, index) => index !== selectedIndex);
+    setImagePreviews(remainingPreviews);
+    setForm((current) => ({ ...current, image: remainingPreviews[0]?.url || "" }));
+
+    if (!remainingPreviews.some((preview) => !preview.existing) && fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
@@ -208,6 +221,12 @@ const ProductFormPage = () => {
       errors.stock_balance = "Please enter a valid stock balance.";
     }
 
+    ["width_cm", "height_cm", "length_cm"].forEach((field) => {
+      if (form[field] !== "" && (Number.isNaN(Number(form[field])) || Number(form[field]) < 0)) {
+        errors[field] = "Dimensions cannot be negative.";
+      }
+    });
+
     if (Object.keys(errors).length) {
       setToast({
         type: "error",
@@ -226,9 +245,13 @@ const ProductFormPage = () => {
     payload.append("description", form.description);
     payload.append("price", Number(form.price || 0).toFixed(2));
     payload.append("stock_balance", Number(form.stock_balance || 0));
+    ["width_cm", "height_cm", "length_cm"].forEach((field) => {
+      payload.append(field, form[field] === "" ? "" : Number(form[field]).toFixed(2));
+    });
     payload.append("active", form.active ? "true" : "false");
     payload.append("image", imagePreviews[0]?.url || form.image || "");
     imageFiles.forEach((file) => payload.append("images", file));
+    removedImageUrls.forEach((url) => payload.append("removed_images", url));
 
     try {
       if (isEditing) {
@@ -363,6 +386,47 @@ const ProductFormPage = () => {
                   }
                 />
               </label>
+              <div className="grid gap-4 md:col-span-2 md:grid-cols-3">
+                <label className="block">
+                  <span className="text-sm font-medium text-stone-700">Width (cm)</span>
+                  <input
+                    className={`${inputClass} mt-2`}
+                    min="0"
+                    step="0.01"
+                    type="number"
+                    value={form.width_cm}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, width_cm: event.target.value }))
+                    }
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-stone-700">Height (cm)</span>
+                  <input
+                    className={`${inputClass} mt-2`}
+                    min="0"
+                    step="0.01"
+                    type="number"
+                    value={form.height_cm}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, height_cm: event.target.value }))
+                    }
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-stone-700">Length (cm)</span>
+                  <input
+                    className={`${inputClass} mt-2`}
+                    min="0"
+                    step="0.01"
+                    type="number"
+                    value={form.length_cm}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, length_cm: event.target.value }))
+                    }
+                  />
+                </label>
+              </div>
               <div className="block md:col-span-2">
                 <span className="text-sm font-medium text-stone-700">Product images</span>
                 <input
@@ -382,15 +446,10 @@ const ProductFormPage = () => {
                     <Upload className="h-4 w-4" strokeWidth={1.8} />
                     Select Images
                   </button>
-                  {imagePreviews.length ? (
-                    <button className={secondaryButtonClass} type="button" onClick={clearSelectedImages}>
-                      <X className="h-4 w-4" strokeWidth={1.8} />
-                      Clear
-                    </button>
-                  ) : null}
                 </div>
                 <p className="mt-2 text-xs leading-5 text-stone-500">
-                  You can select multiple images. The first image is used as the main product image.
+                  Select multiple images, use the star to choose the main image, or remove an image with
+                  its trash button.
                 </p>
               </div>
               <label className="block md:col-span-2">
@@ -447,6 +506,15 @@ const ProductFormPage = () => {
                           <span className="sr-only">Set as main image</span>
                         </button>
                       )}
+                      <button
+                        className={`absolute right-1 ${index === 0 ? "top-1" : "top-9"} inline-flex h-7 w-7 items-center justify-center border border-white/70 bg-white/90 text-stone-700 shadow-sm transition hover:border-red-600 hover:bg-red-50 hover:text-red-700`}
+                        type="button"
+                        onClick={() => removeImage(index)}
+                        title="Remove image"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                        <span className="sr-only">Remove image</span>
+                      </button>
                     </div>
                   ))}
                 </div>

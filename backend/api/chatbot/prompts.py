@@ -53,11 +53,23 @@ def format_product(product):
     category_path = product.category.name
     if product.category.parent:
         category_path = f"{product.category.parent.name} > {product.category.name}"
+    dimensions = format_dimensions(product)
     return (
         f"- ID: {product.id}; Code: {product.code or '-'}; Name: {product.name}; "
         f"Category: {category_path}; Price: RM{product.price}; "
-        f"Stock: {product.stock_balance}; Description: {product.description or '-'}"
+        f"Stock: {product.stock_balance}; Dimensions: {dimensions}; "
+        f"Description: {product.description or '-'}"
     )
+
+
+def format_dimensions(product):
+    values = [
+        f"W {product.width_cm} cm" if product.width_cm is not None else "",
+        f"H {product.height_cm} cm" if product.height_cm is not None else "",
+        f"L {product.length_cm} cm" if product.length_cm is not None else "",
+    ]
+    dimensions = [value for value in values if value]
+    return " x ".join(dimensions) if dimensions else "-"
 
 
 def format_purchase_history(history):
