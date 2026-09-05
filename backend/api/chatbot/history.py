@@ -4,6 +4,9 @@ from api.models import ChatbotConversation, ChatbotMessage
 
 
 def get_or_create_conversation(user, message):
+    if not user or not user.is_authenticated:
+        return None
+
     conversation = ChatbotConversation.objects.filter(user=user).order_by("-updated_at", "-id").first()
     if conversation:
         return conversation
@@ -24,6 +27,9 @@ def save_chatbot_message(
     products_snapshot=None,
     metadata=None,
 ):
+    if conversation is None:
+        return None
+
     message = ChatbotMessage.objects.create(
         conversation=conversation,
         role=role,
@@ -50,6 +56,9 @@ def build_products_snapshot(products):
                 "name": product.name,
                 "price": str(product.price),
                 "category_path": category_path,
+                "width_cm": str(product.width_cm) if product.width_cm is not None else None,
+                "height_cm": str(product.height_cm) if product.height_cm is not None else None,
+                "length_cm": str(product.length_cm) if product.length_cm is not None else None,
             }
         )
     return snapshots

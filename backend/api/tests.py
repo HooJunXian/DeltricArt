@@ -23,6 +23,7 @@ from .models import (
     Postcode,
     Product,
     ProductCategory,
+    ProductImage,
 )
 from .services import build_billplz_signature
 from .signals import SUPERADMIN_USERNAME
@@ -119,6 +120,83 @@ class AdminDashboardApiTests(TestCase):
         self.assertIn("recent_products", response.data)
         self.assertIn("catalog_snapshot", response.data)
         self.assertIn("order_status_summary", response.data)
+
+
+class AdminProductImageApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.staff_user = User.objects.create_user(
+            username="productstaff",
+            email="productstaff@example.com",
+            password="Secret123!",
+            is_staff=True,
+        )
+        self.category = ProductCategory.objects.create(
+            name="Paintings",
+            created_by=self.staff_user,
+        )
+        now = timezone.now()
+        self.product = Product.objects.create(
+            code="ART-IMAGES",
+            name="Product with images",
+            category=self.category,
+            price=Decimal("100.00"),
+            stock_balance=1,
+            image="/media/products/1/main.jpg",
+            show_date_start=now,
+            show_date_end=now + timedelta(days=365),
+            created_by=self.staff_user,
+        )
+        self.main_image = ProductImage.objects.create(
+            product=self.product,
+            image="/media/products/1/main.jpg",
+            seq=0,
+            is_main=True,
+            created_by=self.staff_user,
+        )
+        self.second_image = ProductImage.objects.create(
+            product=self.product,
+            image="/media/products/1/second.jpg",
+            seq=1,
+            is_main=False,
+            created_by=self.staff_user,
+        )
+        self.client.force_authenticate(user=self.staff_user)
+
+    def test_removing_main_image_promotes_selected_remaining_image(self):
+        response = self.client.patch(
+            f"/api/admin/products/{self.product.id}/",
+            {
+                "image": "http://testserver/media/products/1/second.jpg",
+                "removed_images": "http://testserver/media/products/1/main.jpg",
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(ProductImage.objects.filter(id=self.main_image.id).exists())
+        self.second_image.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.image, "/media/products/1/second.jpg")
+        self.assertEqual(self.second_image.seq, 0)
+        self.assertTrue(self.second_image.is_main)
+
+    def test_removing_last_image_clears_product_image(self):
+        self.second_image.delete()
+
+        response = self.client.patch(
+            f"/api/admin/products/{self.product.id}/",
+            {
+                "image": "",
+                "removed_images": "http://testserver/media/products/1/main.jpg",
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.image, "")
+        self.assertFalse(self.product.images.exists())
 
 
 class CartApiTests(TestCase):
@@ -912,14 +990,19 @@ class ChatbotApiTests(TestCase):
             created_by=self.staff_user,
         )
 
-    def test_chatbot_requires_authenticated_user(self):
+    def test_chatbot_is_available_to_guests_without_saving_account_history(self):
         response = self.client.post(
             "/api/chatbot/",
-            {"message": "show me products"},
+            {"message": "hi"},
             format="json",
         )
 
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["conversation_id"])
+        self.assertIn("DeltricArt", response.data["reply"])
+        self.assertEqual(response.data["products"], [])
+        self.assertFalse(ChatbotConversation.objects.exists())
+        self.assertFalse(ChatbotMessage.objects.exists())
 
     @patch("api.views.chatbot.ask_ollama")
     def test_chatbot_returns_ai_reply_and_matching_products(self, ask_ollama_mock):

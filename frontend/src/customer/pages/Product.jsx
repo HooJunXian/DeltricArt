@@ -4,6 +4,16 @@ import { Search } from "lucide-react";
 import { assets } from "../../assets/assets";
 import { ShopContext } from "../context/shop-context";
 
+const formatDimensions = (product) => {
+  const dimensions = [
+    product.width_cm ? `W ${Number(product.width_cm).toFixed(2)} cm` : "",
+    product.height_cm ? `H ${Number(product.height_cm).toFixed(2)} cm` : "",
+    product.length_cm ? `L ${Number(product.length_cm).toFixed(2)} cm` : "",
+  ].filter(Boolean);
+
+  return dimensions.length ? dimensions.join(" x ") : "Contact us";
+};
+
 const Product = () => {
   const { productId } = useParams();
   const { products, productsLoading, formatMoney, delivery_fee, addToCart, showToast } =
@@ -188,10 +198,10 @@ const Product = () => {
               </div>
               <div className="rounded-lg border border-stone-200 bg-white p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-400">
-                  Format
+                  Dimensions
                 </p>
                 <p className="mt-2 font-semibold text-stone-950">
-                  {product.sizes.join(", ")}
+                  {formatDimensions(product)}
                 </p>
               </div>
               <div className="rounded-lg border border-stone-200 bg-white p-4">

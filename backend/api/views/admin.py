@@ -168,9 +168,12 @@ class AdminProductViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         product = serializer.save()
         if self.request.FILES.getlist("images"):
+            existing_images = list(product.images.all())
+            self._delete_image_files(existing_images)
             product.images.all().delete()
             self._save_uploaded_images(product)
         else:
+            self._delete_removed_images(product)
             self._sync_existing_main_image(product)
 
     def _save_uploaded_images(self, product):
@@ -197,9 +200,10 @@ class AdminProductViewSet(viewsets.ModelViewSet):
             product.save(update_fields=["image", "updated_at"])
 
     def _sync_existing_main_image(self, product):
-        selected_image = self._normalize_image_value(self.request.data.get("image", ""))
-        if not selected_image:
+        if "image" not in self.request.data:
             return
+
+        selected_image = self._normalize_image_value(self.request.data.get("image", ""))
 
         if product.image != selected_image:
             product.image = selected_image
@@ -207,6 +211,12 @@ class AdminProductViewSet(viewsets.ModelViewSet):
 
         product_images = list(product.images.all())
         if not product_images:
+            return
+
+        if not selected_image:
+            for product_image in product_images:
+                product_image.is_main = False
+            ProductImage.objects.bulk_update(product_images, ["is_main"])
             return
 
         selected_index = next(
@@ -234,6 +244,39 @@ class AdminProductViewSet(viewsets.ModelViewSet):
             product_image.is_main = index == 0
 
         ProductImage.objects.bulk_update(ordered_images, ["seq", "is_main"])
+
+    def _delete_removed_images(self, product):
+        if hasattr(self.request.data, "getlist"):
+            removed_values = self.request.data.getlist("removed_images")
+        else:
+            removed_values = self.request.data.get("removed_images", [])
+            if isinstance(removed_values, str):
+                removed_values = [removed_values]
+        removed_images = {
+            self._normalize_image_value(value)
+            for value in removed_values
+            if self._normalize_image_value(value)
+        }
+        if not removed_images:
+            return
+
+        images_to_delete = [
+            product_image
+            for product_image in product.images.all()
+            if self._normalize_image_value(product_image.image) in removed_images
+        ]
+        self._delete_image_files(images_to_delete)
+        ProductImage.objects.filter(id__in=[image.id for image in images_to_delete]).delete()
+
+    def _delete_image_files(self, product_images):
+        for product_image in product_images:
+            image_path = self._normalize_image_value(product_image.image)
+            if not image_path or not image_path.startswith(settings.MEDIA_URL):
+                continue
+
+            storage_path = image_path[len(settings.MEDIA_URL):].lstrip("/")
+            if storage_path:
+                default_storage.delete(storage_path)
 
     def _normalize_image_value(self, value):
         if not value:

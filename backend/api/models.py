@@ -203,6 +203,9 @@ class Product(models.Model):
     description = models.TextField(blank=True)
     price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     stock_balance = models.PositiveIntegerField(default=0)
+    width_cm = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    height_cm = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    length_cm = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     image = models.CharField(max_length=500, blank=True)
     category = models.ForeignKey(
         ProductCategory,

@@ -1,6 +1,6 @@
 from django.core.exceptions import ImproperlyConfigured
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -29,7 +29,7 @@ from ..serializers import ChatbotRequestSerializer, CustomerProductSerializer
 
 
 class ChatbotView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     throttle_classes = [ChatbotRateThrottle]
 
     def post(self, request):
@@ -60,7 +60,7 @@ class ChatbotView(APIView):
             )
             return Response(
                 {
-                    "conversation_id": conversation.id,
+                    "conversation_id": conversation.id if conversation else None,
                     "reply": reply,
                     "products": [],
                 }
@@ -77,7 +77,7 @@ class ChatbotView(APIView):
             )
             return Response(
                 {
-                    "conversation_id": conversation.id,
+                    "conversation_id": conversation.id if conversation else None,
                     "reply": reply,
                     "products": [],
                 }
@@ -122,7 +122,7 @@ class ChatbotView(APIView):
 
         return Response(
             {
-                "conversation_id": conversation.id,
+                "conversation_id": conversation.id if conversation else None,
                 "reply": reply,
                 "products": CustomerProductSerializer(
                     response_products,
