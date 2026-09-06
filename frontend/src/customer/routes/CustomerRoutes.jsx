@@ -6,9 +6,11 @@ import Cart from "../pages/Cart";
 import Contact from "../pages/Contact";
 import Home from "../pages/Home";
 import MyPurchase from "../pages/MyPurchase";
+import MyRooms from "../pages/MyRooms";
 import PlaceOrder from "../pages/PlaceOrder";
 import Product from "../pages/Product";
 import Products from "../pages/Products";
+import RoomCustomizer from "../pages/RoomCustomizer";
 import StorefrontLayout from "../layouts/StorefrontLayout";
 
 const CustomerRoutes = () => (
@@ -20,6 +22,9 @@ const CustomerRoutes = () => (
       <Route path="/about" element={<About />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/product/:productId" element={<Product />} />
+      <Route path="/room-customizer" element={<RoomCustomizer />} />
+      <Route path="/room-customizer/:roomId" element={<RoomCustomizer />} />
+      <Route path="/my-rooms" element={<MyRooms />} />
       <Route path="/cart" element={<Cart />} />
       <Route path="/place-order" element={<PlaceOrder />} />
       <Route path="/order" element={<MyPurchase />} />

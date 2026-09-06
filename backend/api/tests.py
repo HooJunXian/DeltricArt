@@ -1,12 +1,15 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management import call_command
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.files.storage import storages
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from datetime import timedelta
 from decimal import Decimal
 import hashlib
 import hmac
+import json
 from unittest.mock import patch
 from urllib.parse import urlparse
 from rest_framework.test import APIClient
@@ -24,12 +27,223 @@ from .models import (
     Product,
     ProductCategory,
     ProductImage,
+    RoomCustomization,
+    RoomCustomizationProduct,
 )
 from .services import build_billplz_signature
 from .signals import SUPERADMIN_USERNAME
 
 
 User = get_user_model()
+
+
+class RoomCustomizationApiTests(TestCase):
+    def setUp(self):
+        self.storage_override = override_settings(
+            STORAGES={
+                "default": {
+                    "BACKEND": "django.core.files.storage.memory.InMemoryStorage",
+                },
+                "private_rooms": {
+                    "BACKEND": "django.core.files.storage.memory.InMemoryStorage",
+                },
+                "staticfiles": {
+                    "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+                },
+            }
+        )
+        self.storage_override.enable()
+        self.addCleanup(self.storage_override.disable)
+        room_image_field = RoomCustomization._meta.get_field("room_image")
+        original_storage = room_image_field.storage
+        room_image_field.storage = storages["private_rooms"]
+        self.addCleanup(setattr, room_image_field, "storage", original_storage)
+
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="roomowner",
+            email="roomowner@example.com",
+            password="Secret123!",
+        )
+        self.other_user = User.objects.create_user(
+            username="otherroomowner",
+            email="otherroomowner@example.com",
+            password="Secret123!",
+        )
+        self.staff_user = User.objects.create_user(
+            username="roomstaff",
+            email="roomstaff@example.com",
+            password="Secret123!",
+            is_staff=True,
+        )
+        self.category = ProductCategory.objects.create(
+            name="Wall Art",
+            created_by=self.staff_user,
+        )
+        now = timezone.now()
+        self.product = Product.objects.create(
+            code="ROOM-ART-001",
+            name="Room Preview Painting",
+            price=Decimal("450.00"),
+            stock_balance=2,
+            width_cm=Decimal("80.00"),
+            height_cm=Decimal("120.00"),
+            image="/media/products/room-art.jpg",
+            category=self.category,
+            is_show=True,
+            show_date_start=now,
+            show_date_end=now + timedelta(days=365),
+            created_by=self.staff_user,
+        )
+
+    def room_payload(self):
+        return {
+            "name": "Living Room",
+            "room_image": SimpleUploadedFile(
+                "living-room.jpg",
+                b"test room image",
+                content_type="image/jpeg",
+            ),
+            "wall_width_cm": "400.00",
+            "wall_height_cm": "280.00",
+            "wall_corners": json.dumps(
+                [
+                    {"x": 0.1, "y": 0.1},
+                    {"x": 0.1, "y": 0.9},
+                    {"x": 0.9, "y": 0.9},
+                    {"x": 0.9, "y": 0.1},
+                ]
+            ),
+            "image_width_px": 1600,
+            "image_height_px": 1200,
+            "placements_payload": json.dumps(
+                [
+                    {
+                        "product_id": self.product.id,
+                        "position_x_cm": "40.00",
+                        "position_y_cm": "50.00",
+                        "z_index": 0,
+                    },
+                    {
+                        "product_id": self.product.id,
+                        "position_x_cm": "180.00",
+                        "position_y_cm": "50.00",
+                        "z_index": 1,
+                    },
+                ]
+            ),
+        }
+
+    def test_room_customizations_require_login(self):
+        response = self.client.get("/api/room-customizations/")
+        self.assertEqual(response.status_code, 401)
+
+    def test_owner_can_create_room_with_repeated_artwork_placements(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(
+            "/api/room-customizations/",
+            self.room_payload(),
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(
+            response.data["wall_corners"],
+            [
+                {"x": 0.1, "y": 0.1},
+                {"x": 0.9, "y": 0.1},
+                {"x": 0.9, "y": 0.9},
+                {"x": 0.1, "y": 0.9},
+            ],
+        )
+        room = RoomCustomization.objects.get(user=self.user)
+        self.assertEqual(room.placements.count(), 2)
+        self.assertEqual(
+            list(room.placements.values_list("product_id", flat=True)),
+            [self.product.id, self.product.id],
+        )
+        self.assertTrue(
+            all(item.width_cm == self.product.width_cm for item in room.placements.all())
+        )
+
+    def test_room_detail_is_private_to_owner(self):
+        room = RoomCustomization.objects.create(
+            user=self.user,
+            name="Private Room",
+            room_image=SimpleUploadedFile("private.jpg", b"private", content_type="image/jpeg"),
+            wall_width_cm=400,
+            wall_height_cm=280,
+            wall_corners=[
+                {"x": 0, "y": 0},
+                {"x": 1, "y": 0},
+                {"x": 1, "y": 1},
+                {"x": 0, "y": 1},
+            ],
+        )
+        self.client.force_authenticate(user=self.other_user)
+
+        response = self.client.get(f"/api/room-customizations/{room.id}/")
+        self.assertEqual(response.status_code, 404)
+
+        image_response = self.client.get(f"/api/room-customizations/{room.id}/image/")
+        self.assertEqual(image_response.status_code, 404)
+
+        self.client.force_authenticate(user=self.user)
+        owner_image_response = self.client.get(f"/api/room-customizations/{room.id}/image/")
+        self.assertEqual(owner_image_response.status_code, 200)
+        self.assertEqual(owner_image_response["Content-Type"], "image/jpeg")
+
+    def test_update_replaces_placements_and_refreshes_dimension_snapshot(self):
+        room = RoomCustomization.objects.create(
+            user=self.user,
+            name="Editable Room",
+            room_image=SimpleUploadedFile("editable.jpg", b"editable", content_type="image/jpeg"),
+            wall_width_cm=400,
+            wall_height_cm=280,
+            wall_corners=[
+                {"x": 0, "y": 0},
+                {"x": 1, "y": 0},
+                {"x": 1, "y": 1},
+                {"x": 0, "y": 1},
+            ],
+        )
+        existing_placement = RoomCustomizationProduct.objects.create(
+            room_customization=room,
+            product=self.product,
+            position_x_cm=10,
+            position_y_cm=10,
+            width_cm=self.product.width_cm,
+            height_cm=self.product.height_cm,
+        )
+        self.product.width_cm = Decimal("90.00")
+        self.product.height_cm = Decimal("130.00")
+        self.product.save(update_fields=["width_cm", "height_cm"])
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.patch(
+            f"/api/room-customizations/{room.id}/",
+            {
+                "name": "Updated Room",
+                "placements": [
+                    {
+                        "placement_id": existing_placement.id,
+                        "product_id": self.product.id,
+                        "position_x_cm": "100.00",
+                        "position_y_cm": "80.00",
+                        "z_index": 0,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        room.refresh_from_db()
+        self.assertEqual(room.name, "Updated Room")
+        self.assertEqual(room.placements.count(), 1)
+        self.assertEqual(room.placements.get().position_x_cm, Decimal("100.00"))
+        self.assertEqual(room.placements.get().width_cm, Decimal("80.00"))
+        self.assertEqual(room.placements.get().height_cm, Decimal("120.00"))
 
 
 class BillplzSignatureTests(TestCase):

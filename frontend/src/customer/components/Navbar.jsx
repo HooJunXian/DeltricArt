@@ -54,7 +54,7 @@ const Navbar = () => {
     ].join(" ");
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50">
+    <header className={`fixed inset-x-0 top-0 ${visible ? "z-[80]" : "z-50"}`}>
       <div className={`transition-all duration-300 ${navTheme}`}>
         <div className="mx-auto flex h-[84px] items-center justify-between px-4 sm:px-[5vw] md:px-[7vw] lg:px-[9vw]">
           <Link to="/">
@@ -65,7 +65,7 @@ const Navbar = () => {
             />
           </Link>
 
-          <ul className="hidden gap-6 text-sm sm:flex">
+          <ul className="hidden gap-6 text-sm lg:flex">
             <NavLink to="/" className={navLinkClass}>
               <p>HOME</p>
               <hr
@@ -111,11 +111,11 @@ const Navbar = () => {
           <div className="flex items-center gap-4 sm:gap-6">
             <img
               src={assets.search_icon}
-              className={`hidden w-5 cursor-pointer transition duration-300 sm:block ${iconStyle}`}
+              className={`hidden w-5 cursor-pointer transition duration-300 lg:block ${iconStyle}`}
               alt="Search"
             />
             {user ? (
-              <div className="group relative hidden sm:block">
+              <div className="group relative hidden lg:block">
                 <button
                   type="button"
                   className={`flex max-w-36 items-center gap-2 truncate border px-3 py-2 text-sm font-medium transition ${accountButtonStyle}`}
@@ -133,6 +133,9 @@ const Navbar = () => {
                     <Link className="hover:text-black" to="/purchase">
                       My Purchase
                     </Link>
+                    <Link className="hover:text-black" to="/my-rooms">
+                      My Rooms
+                    </Link>
                     <button
                       type="button"
                       onClick={handleLogout}
@@ -147,7 +150,7 @@ const Navbar = () => {
               <button
                 type="button"
                 onClick={() => openAuthModal("login")}
-                className={`hidden border px-4 py-2 text-sm font-medium transition sm:inline-flex ${accountButtonStyle}`}
+                className={`hidden border px-4 py-2 text-sm font-medium transition lg:inline-flex ${accountButtonStyle}`}
               >
                 Login
               </button>
@@ -167,7 +170,7 @@ const Navbar = () => {
             <button
               type="button"
               onClick={() => setVisible(true)}
-              className="grid h-10 w-10 place-items-center sm:hidden"
+              className="grid h-10 w-10 place-items-center lg:hidden"
               aria-label="Open menu"
               aria-expanded={visible}
             >
@@ -180,7 +183,7 @@ const Navbar = () => {
           </div>
         </div>
 
-        <div className={`fixed inset-0 z-[60] sm:hidden ${visible ? "pointer-events-auto" : "pointer-events-none"}`}>
+        <div className={`fixed inset-0 z-[60] lg:hidden ${visible ? "pointer-events-auto" : "pointer-events-none"}`}>
           <button
             type="button"
             className={`absolute inset-0 bg-black/35 transition-opacity duration-300 ${
@@ -266,6 +269,13 @@ const Navbar = () => {
                     to="/purchase"
                   >
                     My Purchase
+                  </NavLink>
+                  <NavLink
+                    onClick={() => setVisible(false)}
+                    className="w-full border border-stone-300 px-4 py-3 text-center text-sm font-semibold text-stone-950"
+                    to="/my-rooms"
+                  >
+                    My Rooms
                   </NavLink>
                   <button
                     type="button"

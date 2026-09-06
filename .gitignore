@@ -24,6 +24,7 @@ db.sqlite3
 
 # Uploaded media
 backend/media/
+backend/private_media/
 
 # Python cache
 .pytest_cache/

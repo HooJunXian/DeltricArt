@@ -1,6 +1,6 @@
 import React, { useContext, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Search } from "lucide-react";
+import { ImagePlus, Search } from "lucide-react";
 import { assets } from "../../assets/assets";
 import { ShopContext } from "../context/shop-context";
 
@@ -71,6 +71,9 @@ const Product = () => {
 
   const activeImage = product.image[selectedImage] || product.image[0] || assets.oilpainting_1;
   const hasMultipleImages = product.image.length > 1;
+  const supportsRoomPreview = Boolean(
+    activeImage && Number(product.width_cm) > 0 && Number(product.height_cm) > 0
+  );
 
   const handleMagnifierMove = (event) => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -238,7 +241,16 @@ const Product = () => {
                 className="flex min-h-12 items-center justify-center rounded-lg bg-stone-950 px-7 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-rose-800"
               >
                 Add To Cart
-              </button>              
+              </button>
+              {supportsRoomPreview ? (
+                <Link
+                  to={`/room-customizer?product=${product._id}`}
+                  className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-stone-950 px-7 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-stone-950 transition hover:bg-stone-100"
+                >
+                  <ImagePlus className="h-4 w-4" />
+                  View In My Room
+                </Link>
+              ) : null}
             </div>
 
             <div className="mt-8 border-t border-stone-200 pt-6">

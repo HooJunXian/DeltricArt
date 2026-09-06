@@ -8,3 +8,4 @@ from .catalog import AdminCategorySerializer, AdminProductSerializer, CustomerPr
 from .checkout import CheckoutSerializer
 from .common import CompanySerializer, CountrySerializer, PostcodeSerializer
 from .orders import OrderItemSerializer, OrderSerializer, PaymentSerializer
+from .rooms import RoomCustomizationSerializer, RoomPlacementSerializer

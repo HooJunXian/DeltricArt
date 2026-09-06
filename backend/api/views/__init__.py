@@ -14,3 +14,4 @@ from .checkout import (
 )
 from .common import AdminCompanyDetailView, CompanyDetailView, CountryListView, PostcodeListView
 from .payments import BillPlzCallbackView, BillPlzMockBillView, BillPlzReturnView, get_billplz_bill
+from .rooms import RoomCustomizationDetailView, RoomCustomizationImageView, RoomCustomizationListCreateView

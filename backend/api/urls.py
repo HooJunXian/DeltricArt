@@ -24,6 +24,9 @@ from .views import (
     OrderListView,
     PostcodeListView,
     RegisterView,
+    RoomCustomizationDetailView,
+    RoomCustomizationImageView,
+    RoomCustomizationListCreateView,
 )
 
 
@@ -42,6 +45,9 @@ urlpatterns = [
     path("postcodes/", PostcodeListView.as_view(), name="postcode-list"),
     path("products/", CustomerProductListView.as_view(), name="product-list"),
     path("chatbot/", ChatbotView.as_view(), name="chatbot"),
+    path("room-customizations/", RoomCustomizationListCreateView.as_view(), name="room-customization-list"),
+    path("room-customizations/<int:pk>/", RoomCustomizationDetailView.as_view(), name="room-customization-detail"),
+    path("room-customizations/<int:pk>/image/", RoomCustomizationImageView.as_view(), name="room-customization-image"),
     path("cart/", CartDetailView.as_view(), name="cart-detail"),
     path("cart/items/", CartItemAddView.as_view(), name="cart-item-add"),
     path("cart/items/<int:product_id>/", CartItemDetailView.as_view(), name="cart-item-detail"),
