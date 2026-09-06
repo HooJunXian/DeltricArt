@@ -1,11 +1,17 @@
-import React from "react";
-import { Outlet } from "react-router-dom";
+import React, { useEffect } from "react";
+import { Outlet, useLocation } from "react-router-dom";
 
 import ChatbotPanel from "../components/ChatbotPanel";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 
 const StorefrontLayout = () => {
+  const { pathname, search } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [pathname, search]);
+
   return (
     <>
       <Navbar />

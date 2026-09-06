@@ -2,6 +2,8 @@ from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 from django.db import models
 
+from .storage import private_room_storage
+
 
 class Country(models.Model):
     id = models.AutoField(primary_key=True)
@@ -255,6 +257,61 @@ class ProductImage(models.Model):
 
     def __str__(self):
         return f"{self.product.name} image {self.seq}"
+
+
+class RoomCustomization(models.Model):
+    id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="room_customizations",
+    )
+    name = models.CharField(max_length=120, default="My Room")
+    room_image = models.FileField(
+        storage=private_room_storage,
+        upload_to="room_customizations/%Y/%m/",
+    )
+    wall_width_cm = models.DecimalField(max_digits=9, decimal_places=2)
+    wall_height_cm = models.DecimalField(max_digits=9, decimal_places=2)
+    wall_corners = models.JSONField(default=list)
+    image_width_px = models.PositiveIntegerField(default=0)
+    image_height_px = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "room_customizations"
+        ordering = ["-updated_at", "-id"]
+
+    def __str__(self):
+        return f"{self.user} - {self.name}"
+
+
+class RoomCustomizationProduct(models.Model):
+    id = models.AutoField(primary_key=True)
+    room_customization = models.ForeignKey(
+        RoomCustomization,
+        on_delete=models.CASCADE,
+        related_name="placements",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="room_customization_placements",
+    )
+    position_x_cm = models.DecimalField(max_digits=9, decimal_places=2)
+    position_y_cm = models.DecimalField(max_digits=9, decimal_places=2)
+    width_cm = models.DecimalField(max_digits=8, decimal_places=2)
+    height_cm = models.DecimalField(max_digits=8, decimal_places=2)
+    z_index = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "room_customization_products"
+        ordering = ["z_index", "id"]
+
+    def __str__(self):
+        return f"{self.room_customization.name} - {self.product.name}"
 
 
 class ProductPrice(models.Model):

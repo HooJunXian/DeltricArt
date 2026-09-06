@@ -74,3 +74,19 @@ OLLAMA_MODEL
 OLLAMA_TIMEOUT_SECONDS
 CHATBOT_THROTTLE_RATE
 ```
+
+## View In My Room
+
+Customers can open `/room-customizer` to upload a room photo, calibrate a wall
+with four corners and real measurements, and place dimensioned artworks at
+real-world scale. Guests can design and download locally; signing in is
+required to save a private, editable room.
+
+Saved rooms are available at `/my-rooms`. Their source photos are stored under
+`backend/private_media/` and can only be read through the authenticated room
+image endpoint. Apply migrations before using the feature:
+
+```powershell
+cd backend
+..\env\Scripts\python.exe manage.py migrate
+```

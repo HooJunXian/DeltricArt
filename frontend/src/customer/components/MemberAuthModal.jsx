@@ -53,7 +53,7 @@ function MemberAuthModal({
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !isRegister || countries.length || countryLoading) return undefined;
+    if (!isOpen || !isRegister || countries.length) return undefined;
 
     let isMounted = true;
     setCountryLoading(true);
@@ -82,7 +82,7 @@ function MemberAuthModal({
     return () => {
       isMounted = false;
     };
-  }, [countries.length, countryLoading, isOpen, isRegister]);
+  }, [countries.length, isOpen, isRegister]);
 
   useEffect(() => {
     if (isOpen) {
@@ -210,8 +210,12 @@ function MemberAuthModal({
         </div>
 
         {isRegister ? (
-          <form onSubmit={handleRegisterSubmit} noValidate className="mt-7 grid gap-4 sm:grid-cols-2">
-            <label className="block">
+          <form
+            onSubmit={handleRegisterSubmit}
+            noValidate
+            className="mt-7 grid min-w-0 gap-4 sm:grid-cols-2"
+          >
+            <label className="block min-w-0">
               <span className="text-sm font-medium text-stone-700">Username</span>
               <input
                 className="mt-2 w-full border border-stone-300 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
@@ -223,7 +227,7 @@ function MemberAuthModal({
               />
             </label>
 
-            <label className="block">
+            <label className="block min-w-0">
               <span className="text-sm font-medium text-stone-700">Email</span>
               <input
                 className="mt-2 w-full border border-stone-300 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
@@ -235,7 +239,7 @@ function MemberAuthModal({
               />
             </label>
 
-            <label className="block">
+            <label className="block min-w-0">
               <span className="text-sm font-medium text-stone-700">Mobile</span>
               <div className="mt-2 flex border border-stone-300 transition focus-within:border-stone-950">
                 <select
@@ -263,7 +267,7 @@ function MemberAuthModal({
               </div>
             </label>
 
-            <label className="block">
+            <label className="block min-w-0">
               <span className="text-sm font-medium text-stone-700">Country</span>
               <select
                 className="mt-2 w-full border border-stone-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-stone-950"
@@ -284,7 +288,7 @@ function MemberAuthModal({
               </select>
             </label>
 
-            <label className="block">
+            <label className="block min-w-0">
               <span className="text-sm font-medium text-stone-700">Password</span>
               <input
                 className="mt-2 w-full border border-stone-300 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
@@ -296,7 +300,7 @@ function MemberAuthModal({
               />
             </label>
 
-            <label className="block">
+            <label className="block min-w-0">
               <span className="text-sm font-medium text-stone-700">Confirm Password</span>
               <input
                 className="mt-2 w-full border border-stone-300 px-4 py-3 text-sm outline-none transition focus:border-stone-950"
