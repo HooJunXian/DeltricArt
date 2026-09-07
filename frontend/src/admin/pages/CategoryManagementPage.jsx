@@ -299,8 +299,8 @@ const CategoryManagementPage = () => {
 
   return (
     <AdminSectionShell
-      eyebrow="Inventory"
-      title="Add and edit categories"
+      eyebrow="Catalog"
+      title="Categories"
       description="Create main categories and sub categories, update descriptions, show or hide categories, and permanently delete safe categories."
       action={
         <button className={secondaryButtonClass} type="button" onClick={loadCategories}>

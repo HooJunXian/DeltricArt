@@ -1,5 +1,5 @@
 from .account import CurrentUserView
-from .admin import AdminCategoryViewSet, AdminDashboardView, AdminProductViewSet
+from .admin import AdminCategoryViewSet, AdminDashboardView, AdminOrderListView, AdminProductViewSet
 from .auth import CreateUserView, RegisterView
 from .cart import CartDetailView, CartItemAddView, CartItemDetailView, get_active_cart
 from .catalog import CustomerProductListView

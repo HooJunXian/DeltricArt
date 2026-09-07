@@ -1,60 +1,92 @@
-import React from "react";
-import { Link, NavLink } from "react-router-dom";
+import React, { useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
 
 import { adminNavSections } from "../navigation";
 
-const getNavClass = ({ isActive }) =>
+const navItemClass = ({ isActive }) =>
   [
-    "group inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition",
+    "flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
     isActive
-      ? "bg-stone-950 text-white"
-      : "text-stone-700 hover:bg-stone-100 hover:text-stone-950",
+      ? "bg-white text-stone-950 shadow-sm"
+      : "text-stone-300 hover:bg-white/8 hover:text-white",
   ].join(" ");
 
-const AdminMenu = () => {
+const AdminMenu = ({ onNavigate }) => {
+  const location = useLocation();
+  const [openGroups, setOpenGroups] = useState(() =>
+    Object.fromEntries(
+      adminNavSections
+        .filter((section) => section.items)
+        .map((section) => [
+          section.label,
+          section.items.some((item) => location.pathname.startsWith(item.to)),
+        ]),
+    ),
+  );
+
+  const toggleGroup = (label) => {
+    setOpenGroups((current) => ({ ...current, [label]: !current[label] }));
+  };
+
   return (
-    <nav className="hidden min-w-0 flex-wrap items-center gap-1 lg:flex xl:gap-2">
+    <nav aria-label="Admin navigation" className="space-y-1 px-3 py-5">
       {adminNavSections.map((section) => {
         const Icon = section.icon;
 
-        return (
-          <div key={section.to} className="group relative py-2">
-            <NavLink to={section.to} end={section.to === "/admin"} className={getNavClass}>
-              <Icon className="h-4 w-4" strokeWidth={1.8} />
+        if (!section.items) {
+          return (
+            <NavLink
+              key={section.to}
+              className={navItemClass}
+              end={section.end}
+              onClick={onNavigate}
+              to={section.to}
+            >
+              <Icon className="h-5 w-5 shrink-0" strokeWidth={1.8} />
               <span>{section.label}</span>
-              {section.items.length > 1 ? <ChevronDown className="h-4 w-4" strokeWidth={1.8} /> : null}
             </NavLink>
+          );
+        }
 
-            <div className="invisible absolute left-0 top-full z-50 w-80 pt-2 opacity-0 transition duration-200 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
-              <div className="translate-y-1 rounded-3xl border border-stone-200 bg-white p-3 shadow-[0_24px_60px_rgba(28,25,23,0.14)] transition duration-200 group-hover:translate-y-0 group-focus-within:translate-y-0">
-              <div className="rounded-2xl bg-stone-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-stone-500">
-                  {section.label}
-                </p>
-                <div className="mt-3 space-y-3">
-                  {section.items.map((item) => {
-                    const className =
-                      "block rounded-2xl border border-stone-200 bg-white px-3 py-3 transition hover:border-stone-950";
+        const expanded = Boolean(openGroups[section.label]);
+        const groupId = `admin-nav-${section.label.toLowerCase().replace(/\s+/g, "-")}`;
 
-                    if (item.to) {
-                      return (
-                        <Link key={item.label} className={className} to={item.to}>
-                          <p className="text-sm font-semibold text-stone-950">{item.label}</p>
-                          <p className="mt-1 text-sm text-stone-600">{item.description}</p>
-                        </Link>
-                      );
-                    }
-
-                    return (
-                      <div key={item.label} className={className}>
-                        <p className="text-sm font-semibold text-stone-950">{item.label}</p>
-                        <p className="mt-1 text-sm text-stone-600">{item.description}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+        return (
+          <div key={section.label} className="pt-2">
+            <button
+              aria-controls={groupId}
+              aria-expanded={expanded}
+              className="flex min-h-10 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.16em] text-stone-400 transition hover:bg-white/8 hover:text-white"
+              onClick={() => toggleGroup(section.label)}
+              type="button"
+            >
+              <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+              <span className="flex-1">{section.label}</span>
+              <ChevronDown className={`h-3.5 w-3.5 transition ${expanded ? "rotate-180 text-stone-300" : ""}`} />
+            </button>
+            <div
+              className={`ml-5 grid border-l border-white/10 pl-3 transition-[grid-template-rows,opacity,margin] duration-200 ${
+                expanded ? "mt-1 grid-rows-[1fr] opacity-100" : "mt-0 grid-rows-[0fr] opacity-0"
+              }`}
+              id={groupId}
+            >
+              <div className="min-h-0 space-y-1 overflow-hidden">
+              {section.items.map((item) => {
+                const ItemIcon = item.icon;
+                return (
+                  <NavLink
+                    key={item.to}
+                    className={navItemClass}
+                    onClick={onNavigate}
+                    tabIndex={expanded ? undefined : -1}
+                    to={item.to}
+                  >
+                    <ItemIcon className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+                    <span>{item.label}</span>
+                  </NavLink>
+                );
+              })}
               </div>
             </div>
           </div>

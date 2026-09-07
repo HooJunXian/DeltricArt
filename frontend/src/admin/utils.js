@@ -1,4 +1,4 @@
-import { Boxes, CreditCard, ShieldCheck, UserCog } from "lucide-react";
+import { BadgeCheck, BadgeDollarSign, Boxes, ShoppingBag, TriangleAlert } from "lucide-react";
 
 export const currencyFormatter = new Intl.NumberFormat("en-MY", {
   style: "currency",
@@ -44,32 +44,39 @@ export const buildOverviewCards = (stats) => {
 
   return [
     {
-      title: "Protected Superadmin",
-      value: String(stats.protected_superadmin_count ?? 0),
-      note: "Reserved full-access account locked from edit and delete.",
-      icon: ShieldCheck,
-      tone: "from-amber-300 via-orange-300 to-rose-300",
+      title: "This month's earnings",
+      value: formatCurrency(stats.monthly_earnings, stats.monthly_earnings_currency),
+      note: "Revenue from paid orders this calendar month.",
+      icon: BadgeDollarSign,
+      tone: "bg-amber-100 text-amber-800",
     },
     {
-      title: "Admin Roles",
-      value: String(stats.admin_role_count ?? 0),
-      note: "Live role groups available for staff assignment.",
-      icon: UserCog,
-      tone: "from-sky-300 via-cyan-300 to-emerald-300",
+      title: "Total orders",
+      value: String(stats.order_count ?? 0),
+      note: "Orders submitted through the storefront.",
+      icon: ShoppingBag,
+      tone: "bg-stone-100 text-stone-700",
     },
     {
-      title: "Catalog Controls",
-      value: `${stats.product_count ?? 0} products / ${stats.category_count ?? 0} categories`,
-      note: `${stats.active_product_count ?? 0} products are currently active.`,
+      title: "Paid orders",
+      value: String(stats.paid_order_count ?? 0),
+      note: "Successfully paid customer orders.",
+      icon: BadgeCheck,
+      tone: "bg-emerald-100 text-emerald-700",
+    },
+    {
+      title: "Active products",
+      value: String(stats.active_product_count ?? 0),
+      note: `${stats.category_count ?? 0} categories in the catalog.`,
       icon: Boxes,
-      tone: "from-fuchsia-300 via-pink-300 to-rose-300",
+      tone: "bg-sky-100 text-sky-700",
     },
     {
-      title: "Order Oversight",
-      value: `${stats.order_count ?? 0} orders`,
-      note: `${stats.paid_order_count ?? 0} paid purchases from ${stats.member_count ?? 0} members.`,
-      icon: CreditCard,
-      tone: "from-lime-300 via-emerald-300 to-teal-300",
+      title: "Low stock",
+      value: String(stats.low_stock_count ?? 0),
+      note: "Active products with five units or fewer.",
+      icon: TriangleAlert,
+      tone: "bg-amber-100 text-amber-700",
     },
   ];
 };

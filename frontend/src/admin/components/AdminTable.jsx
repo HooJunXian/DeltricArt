@@ -6,9 +6,10 @@ const normalizeSortValue = (value) => {
 
   if (typeof value === "number") return value;
 
-  const date = Date.parse(value);
-  if (typeof value === "string" && value.trim() && !Number.isNaN(date)) {
-    return date;
+  const isIsoDate = typeof value === "string" && /^\d{4}-\d{2}-\d{2}(?:T|$)/.test(value.trim());
+  if (isIsoDate) {
+    const date = Date.parse(value);
+    if (!Number.isNaN(date)) return date;
   }
 
   return String(value).toLowerCase();
@@ -47,10 +48,12 @@ const AdminTable = ({
   emptyText = "No records found.",
   minWidth = "760px",
   getRowKey,
+  initialSorts,
+  rowClassName = "transition hover:bg-stone-50/70",
 }) => {
   const firstSortableColumn = columns.find((column) => column.sortable !== false);
-  const [sorts, setSorts] = useState(
-    firstSortableColumn ? [{ key: firstSortableColumn.key, direction: "asc" }] : [],
+  const [sorts, setSorts] = useState(() =>
+    initialSorts || (firstSortableColumn ? [{ key: firstSortableColumn.key, direction: "asc" }] : []),
   );
 
   const sortedRows = useMemo(() => {
@@ -115,7 +118,19 @@ const AdminTable = ({
               const activeSort = sortIndex >= 0 ? sorts[sortIndex] : null;
 
               return (
-                <th key={column.key} className={column.headerClassName || "px-3 py-3"}>
+                <th
+                  key={column.key}
+                  aria-sort={
+                    activeSort
+                      ? activeSort.direction === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : sortable
+                        ? "none"
+                        : undefined
+                  }
+                  className={column.headerClassName || "px-3 py-3"}
+                >
                   {sortable ? (
                     <button
                       className={[
@@ -150,7 +165,7 @@ const AdminTable = ({
         <tbody className="divide-y divide-stone-100">
           {loading ? (
             <tr>
-              <td className="px-3 py-6 text-stone-500" colSpan={columns.length}>
+              <td className="px-3 py-10 text-center text-stone-500" colSpan={columns.length}>
                 {loadingText}
               </td>
             </tr>
@@ -158,7 +173,7 @@ const AdminTable = ({
 
           {!loading && rows.length === 0 ? (
             <tr>
-              <td className="px-3 py-6 text-stone-500" colSpan={columns.length}>
+              <td className="px-3 py-10 text-center text-stone-500" colSpan={columns.length}>
                 {emptyText}
               </td>
             </tr>
@@ -166,7 +181,7 @@ const AdminTable = ({
 
           {!loading
             ? sortedRows.map((row, rowIndex) => (
-                <tr key={getRowKey(row, rowIndex)}>
+                <tr key={getRowKey(row, rowIndex)} className={rowClassName}>
                   {columns.map((column) => (
                     <td key={column.key} className={column.cellClassName || "px-3 py-3"}>
                       {column.render ? column.render(row) : row[column.key]}

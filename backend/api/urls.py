@@ -6,6 +6,7 @@ from .views import (
     AdminCategoryViewSet,
     AdminCompanyDetailView,
     AdminDashboardView,
+    AdminOrderListView,
     AdminProductViewSet,
     BillPlzCallbackView,
     BillPlzMockBillView,
@@ -60,5 +61,6 @@ urlpatterns = [
     path("payments/billplz/return/", BillPlzReturnView.as_view(), name="billplz-return"),
     path("me/", CurrentUserView.as_view(), name="current-user"),
     path("admin/dashboard/", AdminDashboardView.as_view(), name="admin-dashboard-data"),
+    path("admin/orders/", AdminOrderListView.as_view(), name="admin-order-list"),
     path("admin/company/", AdminCompanyDetailView.as_view(), name="admin-company-detail"),
 ] + router.urls

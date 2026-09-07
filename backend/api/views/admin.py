@@ -9,7 +9,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.core.files.storage import default_storage
 from django.http import HttpResponse
 from django.db import transaction
-from django.db.models import Count, F, Q
+from django.db.models import Count, F, Q, Sum
 from django.shortcuts import redirect
 from django.utils import timezone
 from rest_framework import generics, viewsets
@@ -61,6 +61,36 @@ from ..services import build_mock_billplz_bill
 
 User = get_user_model()
 
+ADMIN_ORDER_STATUS_KEYS = {
+    Order.STATUS_PENDING_PAYMENT: "pending",
+    Order.STATUS_PAID: "paid",
+    Order.STATUS_FAILED: "failed",
+    Order.STATUS_EXPIRED: "expired",
+    Order.STATUS_CANCELLED: "cancelled",
+}
+
+
+def serialize_admin_order(order):
+    items = list(order.items.all())
+    primary_item = items[0].product_name if items else "No items"
+    if len(items) > 1:
+        primary_item = f"{primary_item} +{len(items) - 1} more"
+
+    return {
+        "id": order.id,
+        "order_number": order.order_number,
+        "username": order.user.get_username(),
+        "customer": order.contact_name or order.user.get_username(),
+        "email": order.contact_email,
+        "primary_item": primary_item,
+        "status": ADMIN_ORDER_STATUS_KEYS.get(order.status, "pending"),
+        "status_label": order.get_status_display(),
+        "fulfillment": order.fulfillment_method,
+        "total": str(order.total),
+        "currency": order.currency_code,
+        "placed_at": order.created_at,
+    }
+
 class AdminDashboardView(APIView):
     permission_classes = [IsAdminUser]
 
@@ -71,8 +101,42 @@ class AdminDashboardView(APIView):
         ).order_by("name")
         recent_members = (
             User.objects.filter(is_superuser=False)
-            .order_by("-date_joined")[:5]
+            .order_by("-date_joined")[:25]
         )
+        recent_orders = list(
+            Order.objects.select_related("user")
+            .prefetch_related("items")
+            .order_by("-created_at")[:25]
+        )
+        recent_products = Product.objects.select_related(
+            "category", "category__parent"
+        ).prefetch_related("images").order_by("-updated_at")[:5]
+
+        order_status_summary = [
+            {
+                "status": ADMIN_ORDER_STATUS_KEYS[value],
+                "label": label,
+                "value": Order.objects.filter(status=value).count(),
+            }
+            for value, label in Order.STATUS_CHOICES
+        ]
+
+        recent_order_data = [serialize_admin_order(order) for order in recent_orders]
+
+        order_count = Order.objects.count()
+        paid_order_count = Order.objects.filter(status=Order.STATUS_PAID).count()
+        pending_order_count = Order.objects.filter(status=Order.STATUS_PENDING_PAYMENT).count()
+        active_product_count = Product.objects.filter(is_show=True).count()
+        low_stock_count = Product.objects.filter(stock_balance__lte=5, is_show=True).count()
+        current_month = timezone.localdate()
+        monthly_earnings = (
+            Order.objects.filter(
+                status=Order.STATUS_PAID,
+                created_at__year=current_month.year,
+                created_at__month=current_month.month,
+            ).aggregate(total=Sum("total"))["total"]
+            or Decimal("0.00")
+        ).quantize(Decimal("0.01"))
 
         return Response(
             {
@@ -83,17 +147,66 @@ class AdminDashboardView(APIView):
                     "category_count": ProductCategory.objects.count(),
                     "active_category_count": ProductCategory.objects.filter(is_show=True).count(),
                     "product_count": Product.objects.count(),
-                    "active_product_count": Product.objects.filter(is_show=True).count(),
-                    "low_stock_count": Product.objects.filter(stock_balance__lte=5, is_show=True).count(),
+                    "active_product_count": active_product_count,
+                    "low_stock_count": low_stock_count,
+                    "order_count": order_count,
+                    "paid_order_count": paid_order_count,
+                    "pending_order_count": pending_order_count,
+                    "monthly_earnings": str(monthly_earnings),
+                    "monthly_earnings_currency": "MYR",
                 },
                 "roles": AdminRoleSerializer(roles, many=True).data,
                 "recent_members": AdminMemberSerializer(recent_members, many=True).data,
-                "recent_orders": [],
-                "recent_products": [],
-                "catalog_snapshot": [],
-                "order_status_summary": [],
+                "recent_orders": recent_order_data,
+                "recent_products": AdminProductSerializer(
+                    recent_products, many=True, context={"request": request}
+                ).data,
+                "catalog_snapshot": [
+                    {"label": "Active products", "value": active_product_count},
+                    {"label": "Low stock", "value": low_stock_count},
+                ],
+                "order_status_summary": order_status_summary,
             }
         )
+
+
+class AdminOrderListView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        orders = Order.objects.select_related("user").prefetch_related("items").order_by("-created_at")
+
+        order_id = request.query_params.get("order_id", "").strip()
+        customer = request.query_params.get("customer", "").strip()
+        status_key = request.query_params.get("status", "").strip().lower()
+        month = request.query_params.get("month", "").strip()
+        order_date = request.query_params.get("date", "").strip()
+
+        if order_id:
+            orders = orders.filter(order_number__icontains=order_id)
+        if customer:
+            orders = orders.filter(
+                Q(user__username__icontains=customer)
+                | Q(contact_name__icontains=customer)
+                | Q(contact_email__icontains=customer)
+            )
+        if status_key:
+            status_value = next(
+                (value for value, key in ADMIN_ORDER_STATUS_KEYS.items() if key == status_key),
+                None,
+            )
+            if status_value:
+                orders = orders.filter(status=status_value)
+        if order_date:
+            orders = orders.filter(created_at__date=order_date)
+        elif month:
+            try:
+                year, month_number = (int(part) for part in month.split("-", 1))
+                orders = orders.filter(created_at__year=year, created_at__month=month_number)
+            except (TypeError, ValueError):
+                pass
+
+        return Response([serialize_admin_order(order) for order in orders[:500]])
 
 
 class AdminCategoryViewSet(viewsets.ModelViewSet):
