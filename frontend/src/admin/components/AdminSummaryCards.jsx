@@ -2,23 +2,25 @@ import React from "react";
 
 const AdminSummaryCards = ({ cards }) => {
   return (
-    <div className="grid gap-5 lg:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
       {cards.map((card) => {
         const Icon = card.icon;
 
         return (
           <article
             key={card.title}
-            className="rounded-[28px] border border-stone-200 bg-white/90 p-5 shadow-[0_20px_60px_rgba(120,113,108,0.10)]"
+            className="rounded-2xl border border-stone-200 bg-white p-5 shadow-[0_8px_24px_rgba(28,25,23,0.05)]"
           >
-            <div
-              className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${card.tone}`}
-            >
-              <Icon className="h-7 w-7 text-stone-950" strokeWidth={1.8} />
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-stone-500">{card.title}</p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight text-stone-950">{card.value}</p>
+              </div>
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${card.tone}`}>
+                <Icon className="h-5 w-5" strokeWidth={1.8} />
+              </div>
             </div>
-            <p className="mt-5 text-sm uppercase tracking-[0.22em] text-stone-500">{card.title}</p>
-            <p className="mt-2 text-2xl font-semibold text-stone-900">{card.value}</p>
-            <p className="mt-2 text-sm leading-6 text-stone-600">{card.note}</p>
+            <p className="mt-3 text-sm leading-5 text-stone-500">{card.note}</p>
           </article>
         );
       })}

@@ -264,7 +264,7 @@ const ProductFormPage = () => {
         });
       }
 
-      navigate("/admin/inventory/products", {
+      navigate("/admin/catalog/products", {
         state: {
           toast: {
             type: "success",
@@ -284,11 +284,11 @@ const ProductFormPage = () => {
 
   return (
     <AdminSectionShell
-      eyebrow="Inventory"
+      eyebrow="Catalog"
       title={isEditing ? "Edit product" : "Add product"}
       description="Maintain product details, category, pricing, stock, image path, and storefront status from a focused product form."
       action={
-        <Link className={secondaryButtonClass} to="/admin/inventory/products">
+        <Link className={secondaryButtonClass} to="/admin/catalog/products">
           <ArrowLeft className="h-4 w-4" strokeWidth={1.8} />
           Product Listing
         </Link>

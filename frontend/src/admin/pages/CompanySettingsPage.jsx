@@ -283,8 +283,8 @@ const CompanySettingsPage = () => {
 
   return (
     <AdminSectionShell
-      eyebrow="Setup"
-      title="Company details"
+      eyebrow="Settings"
+      title="Company profile"
       description="Maintain the single company profile used by storefront contact areas such as the footer."
     >
       <ToastAlert toast={toast} onClose={() => setToast(null)} />

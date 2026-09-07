@@ -1,266 +1,103 @@
 import React, { useMemo } from "react";
-import {
-  BadgeCheck,
-  Boxes,
-  CreditCard,
-  FolderKanban,
-  PackagePlus,
-  ShieldCheck,
-  ShoppingBag,
-  UserCog,
-  Users,
-} from "lucide-react";
-import { useOutletContext } from "react-router-dom";
+import { ArrowRight, PackagePlus, ReceiptText, TriangleAlert } from "lucide-react";
+import { Link, useOutletContext } from "react-router-dom";
 
 import AdminDataState from "../components/AdminDataState";
 import AdminSectionShell from "../components/AdminSectionShell";
 import AdminSummaryCards from "../components/AdminSummaryCards";
-import { buildOverviewCards, formatCurrency, formatDate, getMemberTag } from "../utils";
-
-const quickActions = [
-  {
-    title: "Grant roles and permissions",
-    description: "Assign staff into role groups and manage access by responsibility.",
-    icon: BadgeCheck,
-  },
-  {
-    title: "Manage products and categories",
-    description: "Create products, update price, inventory, and catalog structure.",
-    icon: PackagePlus,
-  },
-  {
-    title: "Review member information",
-    description: "Browse profile, contact details, marketing preference, and addresses.",
-    icon: Users,
-  },
-  {
-    title: "Track member orders",
-    description: "Follow each order from payment through shipping and completion.",
-    icon: ShoppingBag,
-  },
-];
+import AdminTable from "../components/AdminTable";
+import { buttonClass, secondaryButtonClass } from "../catalogUi";
+import { buildOverviewCards, formatCurrency, formatDate } from "../utils";
 
 const statusClassMap = {
+  pending: "bg-amber-100 text-amber-800",
   paid: "bg-emerald-100 text-emerald-700",
-  processing: "bg-amber-100 text-amber-700",
-  pending: "bg-slate-200 text-slate-700",
-  shipped: "bg-sky-100 text-sky-700",
-  completed: "bg-teal-100 text-teal-700",
+  failed: "bg-rose-100 text-rose-700",
+  expired: "bg-stone-200 text-stone-700",
   cancelled: "bg-rose-100 text-rose-700",
 };
 
 const AdminDashboard = () => {
   const { dashboard, loading, error } = useOutletContext();
   const overviewCards = useMemo(() => buildOverviewCards(dashboard?.stats), [dashboard]);
+  const pendingOrders = dashboard?.stats?.pending_order_count ?? 0;
+  const lowStock = dashboard?.stats?.low_stock_count ?? 0;
+  const recentOrderColumns = useMemo(
+    () => [
+      {
+        key: "order_number",
+        label: "Order",
+        render: (order) => <p className="font-semibold text-stone-900">{order.order_number}</p>,
+      },
+      { key: "placed_at", label: "Date", sortValue: (order) => order.placed_at, render: (order) => formatDate(order.placed_at) },
+      { key: "customer", label: "Customer" },
+      {
+        key: "status",
+        label: "Status",
+        sortValue: (order) => order.status_label || order.status,
+        render: (order) => <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClassMap[order.status] || "bg-stone-100 text-stone-700"}`}>{order.status_label || order.status}</span>,
+      },
+      {
+        key: "total",
+        label: "Total",
+        align: "right",
+        headerClassName: "px-3 py-3 text-right",
+        cellClassName: "px-3 py-3 text-right font-semibold text-stone-900",
+        sortValue: (order) => Number(order.total || 0),
+        render: (order) => formatCurrency(order.total, order.currency),
+      },
+    ],
+    [],
+  );
 
   return (
     <AdminSectionShell
-      eyebrow="Dashboard"
-      title="Admin landing page and operational highlights"
-      description="This is the main landing page after admin login, showing delivery status, latest member purchase records, and the most important setup, catalog, and access summaries."
+      eyebrow="Overview"
+      title="Good to see you"
+      description="A focused view of orders, catalog activity, and anything that needs attention."
+      action={
+        <div className="flex flex-wrap gap-2">
+          <Link className={secondaryButtonClass} to="/admin/orders"><ReceiptText className="h-4 w-4" />View orders</Link>
+          <Link className={buttonClass} to="/admin/catalog/products/new"><PackagePlus className="h-4 w-4" />Add product</Link>
+        </div>
+      }
     >
       <AdminDataState loading={loading} error={error}>
         <AdminSummaryCards cards={overviewCards} />
 
-        <div className="mt-8 grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="rounded-[30px] border border-stone-900/8 bg-white/75 p-6 shadow-[0_20px_60px_rgba(120,113,108,0.12)]">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-stone-500">
-              Core Functions
-            </p>
-            <h2 className="prata-regular mt-3 text-3xl text-stone-900">
-              What this panel is built to handle
-            </h2>
-            <div className="mt-6 grid gap-4">
-              {quickActions.map((action) => {
-                const Icon = action.icon;
-                return (
-                  <article
-                    key={action.title}
-                    className="flex gap-4 rounded-3xl border border-stone-900/8 bg-stone-50/80 p-4"
-                  >
-                    <div className="flex h-12 w-12 flex-none items-center justify-center rounded-2xl bg-stone-900 text-white">
-                      <Icon className="h-5 w-5" strokeWidth={1.9} />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-stone-900">{action.title}</h3>
-                      <p className="mt-1 text-sm leading-6 text-stone-600">
-                        {action.description}
-                      </p>
-                    </div>
-                  </article>
-                );
-              })}
+        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.5fr)]">
+          <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[0_8px_24px_rgba(28,25,23,0.05)]">
+            <div className="flex items-center justify-between gap-4 border-b border-stone-200 px-5 py-4">
+              <div><h2 className="text-lg font-semibold text-stone-950">Recent orders</h2><p className="mt-0.5 text-sm text-stone-500">Latest storefront purchases</p></div>
+              <Link className="inline-flex items-center gap-1 text-sm font-semibold text-stone-700 hover:text-stone-950" to="/admin/orders">View all <ArrowRight className="h-4 w-4" /></Link>
             </div>
-          </div>
+            <AdminTable
+              columns={recentOrderColumns}
+              rows={(dashboard?.recent_orders ?? []).slice(0, 6)}
+              loading={loading}
+              emptyText="No orders have been placed yet."
+              minWidth="720px"
+              initialSorts={[{ key: "placed_at", direction: "desc" }]}
+              getRowKey={(order) => order.id}
+            />
+          </section>
 
-          <div className="rounded-[30px] border border-stone-900/8 bg-[#a66a2c] p-6 text-white shadow-[0_20px_60px_rgba(120,113,108,0.18)]">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-100/90">
-              Catalog Snapshot
-            </p>
-            <h2 className="prata-regular mt-3 text-3xl leading-tight">
-              Simple, warm, and easy to scan.
-            </h2>
-            <div className="mt-8 grid gap-3">
-              {(dashboard?.catalog_snapshot ?? []).map((item) => (
-                <div
-                  key={item.label}
-                  className="rounded-3xl border border-white/15 bg-white/10 px-4 py-4"
-                >
-                  <p className="text-sm text-amber-50/90">{item.label}</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{item.value}</p>
-                </div>
-              ))}
+          <aside className="rounded-2xl border border-stone-200 bg-white p-5 shadow-[0_8px_24px_rgba(28,25,23,0.05)]">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700"><TriangleAlert className="h-5 w-5" /></div>
+              <div><h2 className="text-lg font-semibold text-stone-950">Needs attention</h2><p className="text-sm text-stone-500">Items to review today</p></div>
             </div>
-          </div>
-
-          <div className="grid gap-8 lg:col-span-2 lg:grid-cols-[0.95fr_1.05fr]">
-            <div className="rounded-[30px] border border-stone-900/8 bg-white/78 p-6 shadow-[0_20px_60px_rgba(120,113,108,0.12)]">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-stone-500">
-                    Members
-                  </p>
-                  <h2 className="prata-regular mt-3 text-3xl text-stone-900">
-                    Customer information at a glance
-                  </h2>
-                </div>
-                <Users className="h-10 w-10 text-stone-900" strokeWidth={1.6} />
-              </div>
-
-              <div className="mt-6 space-y-4">
-                {(dashboard?.recent_members ?? []).map((member) => (
-                  <article
-                    key={member.id}
-                    className="rounded-3xl border border-stone-900/8 bg-stone-50/80 p-4"
-                  >
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <h3 className="text-lg font-semibold text-stone-900">{member.name}</h3>
-                        <p className="text-sm text-stone-600">{member.email || member.username}</p>
-                      </div>
-                      <div className="rounded-full bg-stone-900 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white">
-                        {getMemberTag(member)}
-                      </div>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-3 text-sm text-stone-600">
-                      <span>{member.phone || "No phone yet"}</span>
-                      <span className="text-stone-300">|</span>
-                      <span>{member.marketing_consent ? "Marketing on" : "Marketing off"}</span>
-                      <span className="text-stone-300">|</span>
-                      <span>{member.default_address || "No saved address"}</span>
-                    </div>
-                  </article>
-                ))}
-                {!loading && (dashboard?.recent_members?.length ?? 0) === 0 ? (
-                  <article className="rounded-3xl border border-dashed border-stone-300 bg-stone-50/60 p-4 text-sm text-stone-500">
-                    No member records are available yet.
-                  </article>
-                ) : null}
-              </div>
+            <div className="mt-5 space-y-3">
+              <Link className="flex items-center justify-between rounded-xl border border-stone-200 p-4 transition hover:border-stone-400" to="/admin/orders">
+                <div><p className="font-medium text-stone-900">Pending payments</p><p className="mt-1 text-sm text-stone-500">Review incomplete orders</p></div>
+                <span className="rounded-lg bg-amber-100 px-2.5 py-1 font-semibold text-amber-800">{pendingOrders}</span>
+              </Link>
+              <Link className="flex items-center justify-between rounded-xl border border-stone-200 p-4 transition hover:border-stone-400" to="/admin/catalog/products">
+                <div><p className="font-medium text-stone-900">Low stock products</p><p className="mt-1 text-sm text-stone-500">Five units or fewer</p></div>
+                <span className="rounded-lg bg-rose-100 px-2.5 py-1 font-semibold text-rose-700">{lowStock}</span>
+              </Link>
             </div>
-
-            <div className="space-y-8">
-              <div className="rounded-[30px] border border-stone-900/8 bg-stone-950 p-6 text-white shadow-[0_20px_60px_rgba(41,37,36,0.24)]">
-                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-stone-400">
-                  Delivery Status
-                </p>
-                <h2 className="prata-regular mt-3 text-3xl text-white">
-                  Latest member purchase records
-                </h2>
-
-                <div className="mt-6 space-y-4">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {(dashboard?.order_status_summary ?? []).map((item) => (
-                      <div key={item.label} className="rounded-3xl border border-white/10 bg-white/5 px-4 py-4">
-                        <p className="text-sm text-stone-300">{item.label}</p>
-                        <p className="mt-1 text-2xl font-semibold text-white">{item.value}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {(dashboard?.recent_orders ?? []).map((order) => (
-                    <article
-                      key={order.id}
-                      className="rounded-3xl border border-white/10 bg-white/5 p-4"
-                    >
-                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.24em] text-stone-400">
-                            {order.order_number}
-                          </p>
-                          <h3 className="mt-1 text-lg font-semibold text-white">{order.customer}</h3>
-                          <p className="mt-1 text-sm text-stone-300">{order.primary_item}</p>
-                          <p className="mt-2 text-xs text-stone-400">{formatDate(order.placed_at)}</p>
-                        </div>
-                        <div className="flex flex-col items-start gap-2 md:items-end">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${
-                              statusClassMap[order.status] || "bg-stone-200 text-stone-700"
-                            }`}
-                          >
-                            {order.status}
-                          </span>
-                          <p className="text-base font-semibold text-white">
-                            {formatCurrency(order.total, order.currency)}
-                          </p>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                  {!loading && (dashboard?.recent_orders?.length ?? 0) === 0 ? (
-                    <article className="rounded-3xl border border-dashed border-white/15 bg-white/5 p-4 text-sm text-stone-400">
-                      No orders have been placed yet.
-                    </article>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="rounded-[30px] border border-stone-900/8 bg-white/78 p-6 shadow-[0_20px_60px_rgba(120,113,108,0.12)]">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-stone-500">
-                      Products
-                    </p>
-                    <h2 className="prata-regular mt-3 text-3xl text-stone-900">
-                      Recently updated catalog items
-                    </h2>
-                  </div>
-                  <Boxes className="h-10 w-10 text-stone-900" strokeWidth={1.6} />
-                </div>
-
-                <div className="mt-6 space-y-4">
-                  {(dashboard?.recent_products ?? []).map((product) => (
-                    <article
-                      key={product.id}
-                      className="rounded-3xl border border-stone-900/8 bg-stone-50/80 p-4"
-                    >
-                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div>
-                          <h3 className="text-lg font-semibold text-stone-900">{product.name}</h3>
-                          <p className="text-sm text-stone-600">
-                            {product.code || "No code"} / {product.category_name || "Uncategorized"}
-                          </p>
-                        </div>
-                        <div className="text-left md:text-right">
-                          <p className="text-base font-semibold text-stone-900">
-                            {formatCurrency(product.price, "MYR")}
-                          </p>
-                          <p className="text-sm text-stone-600">
-                            Stock {product.stock_balance} / Reserved {product.reserved_quantity}
-                          </p>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                  {!loading && (dashboard?.recent_products?.length ?? 0) === 0 ? (
-                    <article className="rounded-3xl border border-dashed border-stone-300 bg-stone-50/60 p-4 text-sm text-stone-500">
-                      No product updates are available yet.
-                    </article>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </div>
+          </aside>
         </div>
       </AdminDataState>
     </AdminSectionShell>

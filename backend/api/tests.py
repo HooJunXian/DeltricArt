@@ -335,6 +335,58 @@ class AdminDashboardApiTests(TestCase):
         self.assertIn("catalog_snapshot", response.data)
         self.assertIn("order_status_summary", response.data)
 
+    def test_admin_order_list_requires_staff_user(self):
+        normal_user = User.objects.create_user(
+            username="order-viewer",
+            email="order-viewer@example.com",
+            password="Secret123!",
+        )
+        self.client.force_authenticate(user=normal_user)
+
+        response = self.client.get("/api/admin/orders/")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_order_list_filters_orders(self):
+        customer = User.objects.create_user(
+            username="filter-customer",
+            email="filter-customer@example.com",
+            password="Secret123!",
+        )
+        cart = Cart.objects.create(user=customer)
+        order = Order.objects.create(
+            user=customer,
+            cart=cart,
+            status=Order.STATUS_PAID,
+            fulfillment_method=Order.FULFILLMENT_DELIVERY,
+            payment_method=Order.PAYMENT_BILLPLZ_CARD,
+            contact_name="Filter Customer",
+            contact_email=customer.email,
+            contact_mobile="0123456789",
+            subtotal=Decimal("120.00"),
+            total=Decimal("120.00"),
+        )
+        self.client.force_authenticate(user=self.staff_user)
+
+        response = self.client.get(
+            "/api/admin/orders/",
+            {
+                "order_id": order.order_number,
+                "customer": customer.username,
+                "status": "paid",
+                "date": order.created_at.date().isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["order_number"], order.order_number)
+        self.assertEqual(response.data[0]["username"], customer.username)
+
+        dashboard_response = self.client.get("/api/admin/dashboard/")
+        self.assertEqual(dashboard_response.data["stats"]["monthly_earnings"], "120.00")
+        self.assertEqual(dashboard_response.data["stats"]["monthly_earnings_currency"], "MYR")
+
 
 class AdminProductImageApiTests(TestCase):
     def setUp(self):

@@ -214,7 +214,7 @@ const ProductListingPage = () => {
           <div className="flex justify-end gap-1">
             <Link
               className={iconButtonClass}
-              to={`/admin/inventory/products/${product.id}/edit`}
+              to={`/admin/catalog/products/${product.id}/edit`}
               title="Edit product"
             >
               <Edit3 {...actionIconProps} />
@@ -239,16 +239,16 @@ const ProductListingPage = () => {
 
   return (
     <AdminSectionShell
-      eyebrow="Inventory"
-      title="Products listing"
-      description="Search and filter products by name, category, and active status. Use this page for review work, then jump into a focused edit form when needed."
+      eyebrow="Catalog"
+      title="Products"
+      description="Search, filter, edit, and manage products in your storefront catalog."
       action={
         <div className="flex flex-wrap gap-2">
           <button className={secondaryButtonClass} type="button" onClick={() => loadProducts(filters)}>
             <RefreshCw className="h-4 w-4" strokeWidth={1.8} />
             Refresh
           </button>
-          <Link className={buttonClass} to="/admin/inventory/products/new">
+          <Link className={buttonClass} to="/admin/catalog/products/new">
             <Plus className="h-4 w-4" strokeWidth={1.8} />
             Add Product
           </Link>
