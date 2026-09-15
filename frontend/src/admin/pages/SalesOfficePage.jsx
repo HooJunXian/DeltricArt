@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw, RotateCcw, Search } from "lucide-react";
+import { Download, RefreshCw, RotateCcw, Search } from "lucide-react";
 import { useOutletContext } from "react-router-dom";
 
 import api from "../../api";
+import { downloadReceiptPdf } from "../../receiptApi";
 import AdminDataState from "../components/AdminDataState";
 import AdminSectionShell from "../components/AdminSectionShell";
 import AdminTable from "../components/AdminTable";
@@ -32,6 +33,7 @@ const SalesOfficePage = () => {
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState("");
   const [tableResetKey, setTableResetKey] = useState(0);
+  const [downloadingOrder, setDownloadingOrder] = useState("");
 
   const loadOrders = useCallback(async (orderFilters) => {
     setOrdersLoading(true);
@@ -67,6 +69,18 @@ const SalesOfficePage = () => {
     setFilters(defaultFilters);
     setTableResetKey((current) => current + 1);
   };
+
+  const downloadReceipt = useCallback(async (order) => {
+    setDownloadingOrder(order.order_number);
+    setOrdersError("");
+    try {
+      await downloadReceiptPdf(order.order_number, { admin: true });
+    } catch {
+      setOrdersError("Unable to download this receipt right now.");
+    } finally {
+      setDownloadingOrder("");
+    }
+  }, []);
 
   const orderColumns = useMemo(
     () => [
@@ -117,8 +131,27 @@ const SalesOfficePage = () => {
         sortValue: (order) => Number(order.total || 0),
         render: (order) => formatCurrency(order.total, order.currency),
       },
+      {
+        key: "receipt",
+        label: "Receipt",
+        sortable: false,
+        render: (order) =>
+          order.status === "paid" ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-lg border border-stone-300 px-3 py-2 text-xs font-semibold text-stone-700 transition hover:border-stone-950 hover:text-stone-950 disabled:cursor-wait disabled:opacity-50"
+              onClick={() => downloadReceipt(order)}
+              disabled={downloadingOrder === order.order_number}
+            >
+              <Download className="h-4 w-4" />
+              {downloadingOrder === order.order_number ? "Preparing..." : "PDF"}
+            </button>
+          ) : (
+            <span className="text-stone-400">-</span>
+          ),
+      },
     ],
-    [],
+    [downloadReceipt, downloadingOrder],
   );
 
   return (
@@ -183,7 +216,7 @@ const SalesOfficePage = () => {
             loading={ordersLoading}
             loadingText="Loading orders..."
             emptyText="No orders match the current filters."
-            minWidth="1100px"
+            minWidth="1200px"
             initialSorts={[{ key: "placed_at", direction: "desc" }]}
             getRowKey={(order) => order.id}
           />

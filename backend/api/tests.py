@@ -7,12 +7,15 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from datetime import timedelta
 from decimal import Decimal
+from io import BytesIO
 import hashlib
 import hmac
 import json
 from unittest.mock import Mock, patch
 from urllib.parse import urlparse
 from rest_framework.test import APIClient
+from pypdf import PdfReader
+from pypdf.generic import ContentStream
 
 from .models import (
     Cart,
@@ -820,6 +823,7 @@ class CheckoutApiTests(TestCase):
         self.assertEqual(response.data[0]["order_number"], order.order_number)
         self.assertEqual(response.data[0]["status"], Order.STATUS_PAID)
 
+
     def test_checkout_rejects_weekend_self_pickup(self):
         self.add_cart_item(quantity=1)
 
@@ -1059,6 +1063,197 @@ class CheckoutApiTests(TestCase):
         self.assertEqual(order.status, Order.STATUS_PENDING_PAYMENT)
         self.assertEqual(event.event_type, BillplzEvent.EVENT_BROWSER_RETURN)
         self.assertEqual(event.processing_result, "display_only")
+
+
+class ReceiptPdfApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="receiptbuyer",
+            email="receiptbuyer@example.com",
+            password="Secret123!",
+        )
+        self.other_user = User.objects.create_user(
+            username="otherreceiptbuyer",
+            email="otherreceiptbuyer@example.com",
+            password="Secret123!",
+        )
+        self.admin = User.objects.create_user(
+            username="receiptadmin",
+            email="receiptadmin@example.com",
+            password="Secret123!",
+            is_staff=True,
+        )
+        self.category = ProductCategory.objects.create(
+            name="Sculpture",
+            created_by=self.admin,
+        )
+        self.product = Product.objects.create(
+            code="ART-RCT-001",
+            name="Twisted Sculpture",
+            price=Decimal("4900.00"),
+            stock_balance=1,
+            category=self.category,
+            is_show=True,
+            show_date_start=timezone.now(),
+            show_date_end=timezone.now() + timedelta(days=365),
+            created_by=self.admin,
+        )
+        Company.objects.create(
+            cName="Deltric Art Gallery",
+            cAddress1="No. 5-02, Jalan Kenari 17F",
+            cPostcode="47100",
+            cCity="Puchong",
+            cState="Selangor",
+            cOfficeNo="03-1234 5678",
+            cOfficeEmail="gallery@example.com",
+        )
+        cart = Cart.objects.create(user=self.user, status=Cart.STATUS_CHECKED_OUT)
+        self.order = Order.objects.create(
+            user=self.user,
+            cart=cart,
+            status=Order.STATUS_PAID,
+            fulfillment_method=Order.FULFILLMENT_DELIVERY,
+            payment_method=Order.PAYMENT_BILLPLZ_CARD,
+            contact_name="Receipt Buyer",
+            contact_email="receiptbuyer@example.com",
+            contact_mobile="60123456789",
+            delivery_addr1="No. 10, Customer Road",
+            delivery_postcode="50000",
+            delivery_city="Kuala Lumpur",
+            delivery_state="Wilayah Persekutuan",
+            subtotal=Decimal("4900.00"),
+            delivery_fee=Decimal("10.00"),
+            total=Decimal("4910.00"),
+        )
+        self.order.items.create(
+            product=self.product,
+            product_name=self.product.name,
+            product_code=self.product.code,
+            quantity=1,
+            unit_price=Decimal("4900.00"),
+            line_total=Decimal("4900.00"),
+        )
+        self.payment = Payment.objects.create(
+            order=self.order,
+            status=Payment.STATUS_PAID,
+            provider=Payment.PROVIDER_BILLPLZ,
+            bill_id="BILL-RECEIPT-001",
+            paid_amount=Decimal("4910.00"),
+            paid_at=timezone.now(),
+        )
+
+    def test_paid_order_owner_can_download_valid_pdf_receipt(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(
+            f"/api/orders/{self.order.order_number}/receipt/"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn(
+            f'receipt-{self.order.order_number}.pdf',
+            response["Content-Disposition"],
+        )
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        reader = PdfReader(BytesIO(response.content))
+        self.assertEqual(len(reader.pages), 1)
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        self.assertIn("RECEIPT", text)
+        self.assertIn(self.order.order_number, text)
+        self.assertIn("Twisted Sculpture", text)
+        self.assertIn("RM4,910.00", text)
+        self.assertIn("BILL-RECEIPT-001", text)
+
+    def test_user_cannot_download_another_users_receipt(self):
+        self.client.force_authenticate(user=self.other_user)
+
+        response = self.client.get(
+            f"/api/orders/{self.order.order_number}/receipt/"
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_receipt_palette_is_grayscale(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(
+            f"/api/orders/{self.order.order_number}/receipt/"
+        )
+        reader = PdfReader(BytesIO(response.content))
+
+        color_operations = 0
+        image_count = 0
+        for page in reader.pages:
+            stream = ContentStream(page.get_contents(), reader)
+            for operands, operator in stream.operations:
+                if operator in (b"rg", b"RG"):
+                    red, green, blue = map(float, operands)
+                    self.assertAlmostEqual(red, green)
+                    self.assertAlmostEqual(green, blue)
+                    color_operations += 1
+                elif operator in (b"k", b"K"):
+                    cyan, magenta, yellow, _black = map(float, operands)
+                    self.assertAlmostEqual(cyan, magenta)
+                    self.assertAlmostEqual(magenta, yellow)
+                    color_operations += 1
+
+            xobjects = page["/Resources"].get("/XObject", {})
+            for reference in xobjects.values():
+                image = reference.get_object()
+                if str(image.get("/Subtype")) != "/Image":
+                    continue
+                image_count += 1
+                color_space = str(image.get("/ColorSpace"))
+                if color_space == "/DeviceGray":
+                    continue
+                self.assertEqual(color_space, "/DeviceRGB")
+                pixels = image.get_data()
+                self.assertEqual(len(pixels) % 3, 0)
+                self.assertTrue(
+                    all(
+                        red == green == blue
+                        for red, green, blue in zip(
+                            pixels[::3], pixels[1::3], pixels[2::3]
+                        )
+                    )
+                )
+
+        self.assertGreater(color_operations, 0)
+        self.assertGreater(image_count, 0)
+
+    def test_pending_payment_cannot_download_receipt(self):
+        self.order.status = Order.STATUS_PENDING_PAYMENT
+        self.order.save(update_fields=["status", "updated_at"])
+        self.payment.status = Payment.STATUS_PENDING
+        self.payment.save(update_fields=["status", "updated_at"])
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(
+            f"/api/orders/{self.order.order_number}/receipt/"
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("after payment is completed", response.data["detail"])
+
+    def test_admin_can_download_any_paid_receipt(self):
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.get(
+            f"/api/admin/orders/{self.order.order_number}/receipt/"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
+    def test_member_cannot_use_admin_receipt_endpoint(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(
+            f"/api/admin/orders/{self.order.order_number}/receipt/"
+        )
+
+        self.assertEqual(response.status_code, 403)
 
 
 class CompanyApiTests(TestCase):

@@ -7,6 +7,7 @@ import {
   MapPin,
   PackageCheck,
   Phone,
+  Printer,
   ShoppingBag,
   Store,
   Truck,
@@ -15,6 +16,7 @@ import {
 import api from "../../api";
 import failedImage from "../../assets/failed.png";
 import successImage from "../../assets/success.png";
+import { printReceiptPdf } from "../../receiptApi";
 import { ShopContext } from "../context/shop-context";
 
 const formatOrderMoney = (order, amount) => {
@@ -121,6 +123,7 @@ const MyPurchase = () => {
   const [activeTab, setActiveTab] = useState(purchaseTabs[0].id);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [receiptPrinting, setReceiptPrinting] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -178,6 +181,7 @@ const MyPurchase = () => {
   }, [openAuthModal, orderNumber, showToast]);
 
   const receiptState = useMemo(() => getReceiptState(order), [order]);
+  const canPrintReceipt = order?.status === "SC" && order?.payment?.status === "paid";
   const selectedTab = useMemo(
     () => purchaseTabs.find((tab) => tab.id === activeTab) || purchaseTabs[0],
     [activeTab]
@@ -196,6 +200,25 @@ const MyPurchase = () => {
   ]
     .filter(Boolean)
     .join(", ");
+
+  const printReceipt = async () => {
+    if (!order?.order_number || !canPrintReceipt || receiptPrinting) return;
+    setReceiptPrinting(true);
+    try {
+      await printReceiptPdf(order.order_number);
+    } catch (requestError) {
+      showToast({
+        type: "error",
+        title: "Receipt not printed",
+        message:
+          requestError.response?.status === 409
+            ? "The PDF receipt is available after payment is completed."
+            : "Unable to open the receipt print dialog right now.",
+      });
+    } finally {
+      setReceiptPrinting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -487,6 +510,20 @@ const MyPurchase = () => {
               </div>
             </div>
             <div className="mt-7 grid grid-cols-1 gap-3">
+              <button
+                type="button"
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-stone-950 bg-white px-7 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-stone-950 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:border-stone-300 disabled:text-stone-400 disabled:opacity-70"
+                onClick={printReceipt}
+                disabled={!canPrintReceipt || receiptPrinting}
+              >
+                <Printer className="h-4 w-4" strokeWidth={1.8} />
+                {receiptPrinting ? "Preparing Receipt..." : "Print Receipt"}
+              </button>
+              {!canPrintReceipt ? (
+                <p className="text-center text-xs text-stone-500">
+                  Available after payment is completed.
+                </p>
+              ) : null}
               <Link
                 to="/products"
                 className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-stone-950 px-7 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-rose-800"

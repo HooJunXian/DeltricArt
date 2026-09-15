@@ -11,6 +11,8 @@ python-dotenv
 mssql-django
 pyodbc
 pydantic
+reportlab
+pypdf
 langgraph
 langchain-google-genai
 langchain-ollama
