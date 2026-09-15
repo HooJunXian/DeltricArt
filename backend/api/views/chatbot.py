@@ -1,29 +1,20 @@
-from django.core.exceptions import ImproperlyConfigured
+from django.conf import settings
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..chatbot.ai_client import ask_ollama
+from ..chatbot.ai_client import ModelUnavailableError
 from ..chatbot.history import (
     build_products_snapshot,
     get_or_create_conversation,
+    get_recent_messages,
     save_chatbot_message,
 )
-from ..chatbot.knowledge import (
-    build_capability_context,
-    build_greeting_reply,
-    build_out_of_scope_reply,
-    classify_chatbot_intent,
-    INTENT_GREETING,
-    INTENT_OUT_OF_SCOPE,
-    is_supported_request,
-    retrieve_capability_context,
-)
-from ..chatbot.product_search import get_purchase_history, search_products
-from ..chatbot.prompts import build_chat_messages
-from ..chatbot.response_products import filter_products_mentioned_in_reply
+from ..chatbot.knowledge import INTENT_OUT_OF_SCOPE
+from ..chatbot.response_products import select_products_by_ids
 from ..chatbot.throttles import ChatbotRateThrottle
+from ..chatbot.workflow import run_chatbot_workflow
 from ..models import ChatbotMessage
 from ..serializers import ChatbotRequestSerializer, CustomerProductSerializer
 
@@ -37,93 +28,84 @@ class ChatbotView(APIView):
         serializer.is_valid(raise_exception=True)
 
         message = serializer.validated_data["message"]
-        conversation = get_or_create_conversation(request.user, message)
-        capability_documents = retrieve_capability_context(message)
-        intent = classify_chatbot_intent(message, capability_documents)
-        is_out_of_scope = intent == INTENT_OUT_OF_SCOPE
-
-        save_chatbot_message(
+        requested_conversation_id = serializer.validated_data.get("conversation_id")
+        conversation = get_or_create_conversation(
+            request.user,
+            message,
+            requested_conversation_id,
+        )
+        conversation_was_reset = bool(
+            requested_conversation_id
+            and conversation
+            and conversation.id != requested_conversation_id
+        )
+        history = get_recent_messages(
+            conversation,
+            turn_limit=getattr(settings, "CHATBOT_HISTORY_TURNS", 8),
+        )
+        user_message = save_chatbot_message(
             conversation=conversation,
             role=ChatbotMessage.ROLE_USER,
             content=message,
-            intent=intent,
-            is_out_of_scope=is_out_of_scope,
-        )
-
-        if intent == INTENT_GREETING:
-            reply = build_greeting_reply(message)
-            save_chatbot_message(
-                conversation=conversation,
-                role=ChatbotMessage.ROLE_ASSISTANT,
-                content=reply,
-                intent=intent,
-            )
-            return Response(
-                {
-                    "conversation_id": conversation.id if conversation else None,
-                    "reply": reply,
-                    "products": [],
-                }
-            )
-
-        if not is_supported_request(message, capability_documents):
-            reply = build_out_of_scope_reply(message)
-            save_chatbot_message(
-                conversation=conversation,
-                role=ChatbotMessage.ROLE_ASSISTANT,
-                content=reply,
-                intent=intent,
-                is_out_of_scope=True,
-            )
-            return Response(
-                {
-                    "conversation_id": conversation.id if conversation else None,
-                    "reply": reply,
-                    "products": [],
-                }
-            )
-
-        products = search_products(message)
-        purchase_history = (
-            get_purchase_history(request.user)
-            if intent == "purchase_history"
-            else []
-        )
-        messages = build_chat_messages(
-            message,
-            products,
-            purchase_history=purchase_history,
-            user=request.user,
-            capability_context=build_capability_context(capability_documents),
         )
 
         try:
-            reply = ask_ollama(messages)
-        except (ImproperlyConfigured, RuntimeError):
+            result = run_chatbot_workflow(
+                message=message,
+                user=request.user,
+                history=history,
+            )
+        except ModelUnavailableError:
             reply = "AI assistant is temporarily unavailable. Please try again later."
             save_chatbot_message(
                 conversation=conversation,
                 role=ChatbotMessage.ROLE_ASSISTANT,
                 content=reply,
-                intent=intent,
                 metadata={"error": "ai_unavailable"},
             )
             return Response({"detail": reply}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-        response_products = filter_products_mentioned_in_reply(products, reply)
+        answer = result["answer"]
+        intent = result["intent"]
+        products = result.get("products", [])
+        requested_product_ids = [
+            recommendation.product_id for recommendation in answer.recommendations
+        ]
+        response_products = select_products_by_ids(products, requested_product_ids)
+        valid_product_ids = {product.id for product in response_products}
+        answer.recommendations = [
+            recommendation
+            for recommendation in answer.recommendations
+            if recommendation.product_id in valid_product_ids
+        ]
+        reply = answer.render_text()
         products_snapshot = build_products_snapshot(response_products)
+
+        if user_message is not None:
+            user_message.intent = intent
+            user_message.is_out_of_scope = intent == INTENT_OUT_OF_SCOPE
+            user_message.save(update_fields=["intent", "is_out_of_scope"])
+
         save_chatbot_message(
             conversation=conversation,
             role=ChatbotMessage.ROLE_ASSISTANT,
             content=reply,
             intent=intent,
+            is_out_of_scope=intent == INTENT_OUT_OF_SCOPE,
             products_snapshot=products_snapshot,
+            metadata={
+                "provider": result.get("provider", "unknown"),
+                "structured_answer": answer.model_dump(mode="json"),
+            },
         )
 
         return Response(
             {
                 "conversation_id": conversation.id if conversation else None,
+                "conversation_was_reset": conversation_was_reset,
                 "reply": reply,
+                "answer": answer.model_dump(mode="json"),
+                "provider": result.get("provider", "unknown"),
                 "products": CustomerProductSerializer(
                     response_products,
                     many=True,

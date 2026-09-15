@@ -17,5 +17,17 @@ def filter_products_mentioned_in_reply(products, reply):
     return mentioned_products
 
 
+def select_products_by_ids(products, product_ids):
+    products_by_id = {product.id: product for product in products}
+    selected = []
+    seen = set()
+    for product_id in product_ids:
+        if product_id in seen or product_id not in products_by_id:
+            continue
+        seen.add(product_id)
+        selected.append(products_by_id[product_id])
+    return selected
+
+
 def normalize_text(value):
     return re.sub(r"\s+", " ", str(value or "").strip().lower())

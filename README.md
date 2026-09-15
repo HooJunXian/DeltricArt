@@ -72,8 +72,58 @@ BILLPLZ_BASE_URL
 OLLAMA_BASE_URL
 OLLAMA_MODEL
 OLLAMA_TIMEOUT_SECONDS
+OLLAMA_EMBEDDING_MODEL
+GEMINI_API_KEY
+GEMINI_MODEL
+CHATBOT_LLM_PROVIDER
+CHATBOT_LLM_FALLBACK_PROVIDER
+CHATBOT_LLM_TIMEOUT_SECONDS
+CHATBOT_LLM_MAX_RETRIES
+CHATBOT_HISTORY_TURNS
+CHATBOT_IDLE_TIMEOUT_MINUTES
+CHATBOT_EMBEDDING_ENABLED
+CHATBOT_EMBEDDING_DIMENSIONS
+CHATBOT_SEMANTIC_CANDIDATES
+CHATBOT_SEMANTIC_MIN_SCORE
 CHATBOT_THROTTLE_RATE
 ```
+
+## Chatbot AI and semantic search
+
+The chatbot uses a LangGraph workflow, a structured Pydantic response, and a
+configurable model provider. `CHATBOT_LLM_PROVIDER=auto` uses Gemini when
+`GEMINI_API_KEY` is present and falls back to Ollama. Set it explicitly to
+`gemini` or `ollama` to force one provider.
+
+Authenticated conversations use a rolling idle timeout. Each message extends
+the conversation by `CHATBOT_IDLE_TIMEOUT_MINUTES` (60 by default), including
+across midnight. After expiry, the next message starts a new conversation and
+the old record is marked `expired`. Della receives the latest
+`CHATBOT_HISTORY_TURNS` complete user/assistant turns (8 by default).
+
+The default local embedding model is the 768-dimension `embeddinggemma` model.
+Install it and build the product semantic index after migrations:
+
+```powershell
+ollama pull embeddinggemma
+cd backend
+..\env\Scripts\python.exe manage.py migrate
+..\env\Scripts\python.exe manage.py index_product_embeddings
+```
+
+Run `index_product_embeddings` again after product names, descriptions,
+categories, or dimensions change. Unchanged products are skipped; use `--force`
+to rebuild every vector. If Ollama or the semantic index is unavailable, product
+search automatically falls back to the existing SQL keyword search.
+
+The current database host does not expose the PostgreSQL `vector` extension, so
+embeddings are stored in a separate JSON-backed index and ranked in the Django
+process. This is suitable for the current catalogue size and keeps the model
+separate for a later pgvector migration.
+
+The Gemini free tier should not receive personal, sensitive, payment, or
+confidential information. Only public catalogue data and non-identifying
+shopping context should be sent to a free-tier provider.
 
 ## View In My Room
 

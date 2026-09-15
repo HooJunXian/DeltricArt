@@ -259,6 +259,34 @@ class ProductImage(models.Model):
         return f"{self.product.name} image {self.seq}"
 
 
+class ProductEmbedding(models.Model):
+    """Portable semantic index for product retrieval.
+
+    The current PostgreSQL host does not expose the pgvector extension, so the
+    vector is stored as JSON and ranked in the application. Keeping it in a
+    separate model makes a future pgvector migration isolated from Product.
+    """
+
+    id = models.AutoField(primary_key=True)
+    product = models.OneToOneField(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="semantic_embedding",
+    )
+    embedding = models.JSONField(default=list)
+    dimensions = models.PositiveIntegerField(default=0)
+    model_name = models.CharField(max_length=120)
+    content_hash = models.CharField(max_length=64, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "product_embeddings"
+        ordering = ["product_id"]
+
+    def __str__(self):
+        return f"Embedding for {self.product_id} ({self.model_name})"
+
+
 class RoomCustomization(models.Model):
     id = models.AutoField(primary_key=True)
     user = models.ForeignKey(
@@ -612,6 +640,14 @@ class BillplzEvent(models.Model):
 
 
 class ChatbotConversation(models.Model):
+    STATUS_ACTIVE = "active"
+    STATUS_EXPIRED = "expired"
+
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_EXPIRED, "Expired"),
+    ]
+
     id = models.AutoField(primary_key=True)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -619,6 +655,13 @@ class ChatbotConversation(models.Model):
         related_name="chatbot_conversations",
     )
     title = models.CharField(max_length=120, blank=True)
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default=STATUS_ACTIVE,
+        db_index=True,
+    )
+    expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

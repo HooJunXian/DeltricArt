@@ -10,3 +10,7 @@ psycopg2-binary
 python-dotenv
 mssql-django
 pyodbc
+pydantic
+langgraph
+langchain-google-genai
+langchain-ollama

@@ -2,11 +2,48 @@ import re
 
 
 INTENT_GREETING = "greeting"
+INTENT_COURTESY = "courtesy"
+INTENT_COMPANY_CONTACT = "company_contact"
 INTENT_OUT_OF_SCOPE = "out_of_scope"
 INTENT_GENERAL_SHOPPING = "shopping_help"
 
 
 CAPABILITY_DOCUMENTS = [
+    {
+        "id": "company_contact",
+        "title": "Company contact information",
+        "keywords": [
+            "company address",
+            "business address",
+            "address",
+            "location",
+            "located",
+            "where are you",
+            "contact",
+            "phone",
+            "telephone",
+            "email",
+            "地址",
+            "位置",
+            "在哪里",
+            "在哪裡",
+            "联系",
+            "聯絡",
+            "电话",
+            "電話",
+            "邮箱",
+            "電郵",
+            "alamat",
+            "lokasi",
+            "hubungi",
+            "telefon",
+            "emel",
+        ],
+        "content": (
+            "The assistant can provide DeltricArt's public address, location, email, "
+            "and phone details directly from the current company profile."
+        ),
+    },
     {
         "id": "product_recommendation",
         "title": "Product recommendation",
@@ -184,6 +221,29 @@ GREETING_OR_IDENTITY_KEYWORDS = [
     "你可以做什麼",
 ]
 
+GRATITUDE_KEYWORDS = [
+    "thank you",
+    "thanks",
+    "thank u",
+    "谢谢",
+    "謝謝",
+    "多谢",
+    "多謝",
+    "terima kasih",
+    "makasih",
+]
+
+FAREWELL_KEYWORDS = [
+    "bye",
+    "goodbye",
+    "see you",
+    "再见",
+    "再見",
+    "拜拜",
+    "jumpa lagi",
+    "selamat tinggal",
+]
+
 
 def retrieve_capability_context(message, limit=4):
     lowered = str(message or "").lower()
@@ -209,6 +269,14 @@ def is_greeting_or_identity_request(message):
     )
 
 
+def is_courtesy_message(message):
+    lowered = str(message or "").lower().strip()
+    return any(
+        keyword in lowered
+        for keyword in GRATITUDE_KEYWORDS + FAREWELL_KEYWORDS
+    )
+
+
 def classify_chatbot_intent(message, capability_documents):
     lowered = str(message or "").lower().strip()
     if not lowered:
@@ -219,6 +287,8 @@ def classify_chatbot_intent(message, capability_documents):
         return INTENT_GREETING
     if capability_documents:
         return capability_documents[0]["id"]
+    if is_courtesy_message(message):
+        return INTENT_COURTESY
     if re.search(r"\b(art|artist|gallery|wall|decor|gift|price|buy|order)\b", lowered):
         return INTENT_GENERAL_SHOPPING
     return INTENT_OUT_OF_SCOPE
@@ -237,11 +307,11 @@ def build_capability_context(capability_documents):
 def build_out_of_scope_reply(message):
     if re.search(r"[\u4e00-\u9fff]", str(message or "")):
         return (
-            "抱歉，这个问题不在 DeltricArt AI 购物助手的能力范围内。我可以帮你找产品、"
+            "抱歉，这个问题不在 Della（DeltricArt AI 购物助手）的能力范围内。我可以帮你找产品、"
             "比较产品、根据预算或场景推荐作品、回答产品问题，或根据你的购买记录做推荐。"
         )
     return (
-        "Sorry, that is outside the scope of DeltricArt's AI shopping assistant. "
+        "Sorry, that is outside the scope of Della, DeltricArt's AI shopping assistant. "
         "I can help with product search, product comparison, budget or scenario recommendations, "
         "product Q&A, and personalized shopping suggestions."
     )
@@ -250,11 +320,37 @@ def build_out_of_scope_reply(message):
 def build_greeting_reply(message):
     if re.search(r"[\u4e00-\u9fff]", str(message or "")):
         return (
-            "你好，我是 DeltricArt AI 购物助手。你可以问我产品推荐、产品比较、"
+            "你好，我是 Della，你的 DeltricArt 专属艺术选购助手。你可以问我产品推荐、产品比较、"
             "预算筛选、适合场景，或关于作品的问题。"
         )
     return (
-        "Hello, I am DeltricArt's AI shopping assistant. I can help with product "
+        "Hello, I am Della, your personal DeltricArt art guide. I can help with product "
         "recommendations, product comparison, budget filtering, scenario suggestions, "
         "and product questions."
+    )
+
+
+def build_courtesy_reply(message):
+    value = str(message or "")
+    lowered = value.lower()
+    is_farewell = any(keyword in lowered for keyword in FAREWELL_KEYWORDS)
+
+    if re.search(r"[\u4e00-\u9fff]", value):
+        if is_farewell:
+            return "再见！很高兴能帮到你，欢迎随时回来找 Della。"
+        return "不客气！很高兴能帮到你。如果还想了解或寻找其他艺术作品，随时告诉我。"
+
+    if "terima kasih" in lowered or "makasih" in lowered:
+        return (
+            "Sama-sama! Saya gembira dapat membantu. Beritahu saya jika anda ingin "
+            "mencari atau mengetahui lebih lanjut tentang karya seni lain."
+        )
+    if "jumpa lagi" in lowered or "selamat tinggal" in lowered:
+        return "Jumpa lagi! Saya gembira dapat membantu. Della sentiasa mengalu-alukan anda."
+
+    if is_farewell:
+        return "Goodbye! It was a pleasure helping you. You are always welcome to visit Della again."
+    return (
+        "You're very welcome! I'm happy to help. If you'd like to explore another "
+        "artwork, just let me know."
     )

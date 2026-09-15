@@ -1,12 +1,13 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bot, Loader2, MessageCircle, Send, Sparkles, X } from "lucide-react";
+import { Loader2, Send, X } from "lucide-react";
 
+import dellaIcon from "../../assets/della_chatbot_icon.png";
 import { ShopContext } from "../context/shop-context";
 import { sendChatbotMessage } from "../services/chatbotApi";
 
 const starterPrompts = [
-  "推荐 RM300 以下适合客厅的作品",
+  "推荐 RM1000 以下适合客厅的作品",
   "Compare suitable gift products",
   "有什么雕塑适合办公室？",
 ];
@@ -14,7 +15,7 @@ const starterPrompts = [
 const welcomeMessage = {
   id: "welcome",
   role: "assistant",
-  text: "Hi, I am DeltricArt's shopping assistant. You can ask me for product recommendations, comparisons, budget filters, or product questions.",
+  text: "Hi, I am Della, your personal art guide. You can ask me for product recommendations, comparisons, budget filters, or product questions.",
   products: [],
 };
 
@@ -24,6 +25,7 @@ const ChatbotPanel = () => {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([welcomeMessage]);
+  const [conversationId, setConversationId] = useState(null);
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -34,30 +36,34 @@ const ChatbotPanel = () => {
     const nextMessage = messageText.trim();
     if (!nextMessage || loading) return;
 
+    const userMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      text: nextMessage,
+      products: [],
+    };
     setInput("");
 
     setLoading(true);
-    setMessages((current) => [
-      ...current,
-      {
-        id: `user-${Date.now()}`,
-        role: "user",
-        text: nextMessage,
-        products: [],
-      },
-    ]);
+    setMessages((current) => [...current, userMessage]);
 
     try {
-      const response = await sendChatbotMessage(nextMessage);
-      setMessages((current) => [
-        ...current,
-        {
-          id: `assistant-${Date.now()}`,
-          role: "assistant",
-          text: response.data.reply,
-          products: response.data.products || [],
-        },
-      ]);
+      const response = await sendChatbotMessage(nextMessage, conversationId);
+      if (response.data.conversation_id) {
+        setConversationId(response.data.conversation_id);
+      }
+      const assistantMessage = {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        text: response.data.answer?.summary || response.data.reply,
+        answer: response.data.answer || null,
+        products: response.data.products || [],
+      };
+      setMessages((current) =>
+        response.data.conversation_was_reset
+          ? [welcomeMessage, userMessage, assistantMessage]
+          : [...current, assistantMessage],
+      );
     } catch (error) {
       setMessages((current) => [
         ...current,
@@ -66,7 +72,7 @@ const ChatbotPanel = () => {
           role: "assistant",
           text:
             error.response?.data?.detail ||
-            "I cannot reach the AI assistant right now. Please make sure Ollama is running.",
+            "I cannot reach the AI assistant right now. Please try again later.",
           products: [],
         },
       ]);
@@ -90,12 +96,12 @@ const ChatbotPanel = () => {
           <div className="flex h-[min(680px,calc(100vh-7rem))] flex-col">
           <header className="flex items-center justify-between border-b border-stone-200 bg-stone-950 px-4 py-3 text-white">
             <div className="flex items-center gap-3">
-              <span className="grid h-9 w-9 place-items-center bg-white text-stone-950">
-                <Sparkles className="h-4 w-4" strokeWidth={2} />
+              <span className="grid h-9 w-9 place-items-center bg-[#f8f3e7]">
+                <img className="h-8 w-8 object-contain" src={dellaIcon} alt="" />
               </span>
               <div>
-                <p className="text-sm font-semibold">DeltricArt Assistant</p>
-                <p className="text-xs text-stone-300">Powered by Qwen3:8b</p>
+                <p className="text-sm font-semibold">Della</p>
+                <p className="text-xs text-stone-300">Your personal art guide</p>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -172,13 +178,21 @@ const ChatbotPanel = () => {
 
       <button
         type="button"
-        className="ml-auto grid h-14 w-14 place-items-center rounded-full bg-stone-950 text-white shadow-[0_18px_45px_rgba(28,25,23,0.28)] transition duration-200 hover:scale-105 hover:bg-stone-800 active:scale-95"
+        className={`ml-auto grid h-14 w-14 place-items-center rounded-full border shadow-[0_18px_45px_rgba(28,25,23,0.28)] transition duration-200 hover:scale-105 active:scale-95 ${
+          isOpen
+            ? "border-stone-950 bg-stone-950 text-white hover:bg-stone-800"
+            : "border-[#18245d]/20 bg-[#f8f3e7] text-[#18245d] hover:bg-white"
+        }`}
         onClick={() => setIsOpen((current) => !current)}
         aria-controls="deltricart-chatbot-panel"
         aria-expanded={isOpen}
         aria-label={isOpen ? "Close shopping assistant" : "Open shopping assistant"}
       >
-        {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
+        {isOpen ? (
+          <X className="h-6 w-6" />
+        ) : (
+          <img className="h-11 w-11 object-contain" src={dellaIcon} alt="" />
+        )}
       </button>
     </div>
   );
@@ -197,8 +211,19 @@ const ChatMessage = ({ message, formatMoney }) => {
               : "border border-stone-200 bg-white text-stone-800"
           }`}
         >
-          {!isUser ? <Bot className="mt-1 h-4 w-4 shrink-0 text-stone-500" /> : null}
-          <p className="whitespace-pre-line">{message.text}</p>
+          {!isUser ? (
+            <img className="mt-0.5 h-5 w-5 shrink-0 object-contain" src={dellaIcon} alt="" />
+          ) : null}
+          <div className="min-w-0">
+            <p className="whitespace-pre-line">{message.text}</p>
+            {message.answer?.details?.length ? (
+              <dl className="mt-3 divide-y divide-stone-200 border-t border-stone-200">
+                {message.answer.details.map((detail, index) => (
+                  <ContactDetail key={`${detail.label}-${index}`} detail={detail} />
+                ))}
+              </dl>
+            ) : null}
+          </div>
         </div>
 
         {message.products?.length ? (
@@ -208,6 +233,9 @@ const ChatMessage = ({ message, formatMoney }) => {
                 key={product.id}
                 product={product}
                 formatMoney={formatMoney}
+                reason={message.answer?.recommendations?.find(
+                  (item) => item.product_id === product.id,
+                )?.reason}
               />
             ))}
           </div>
@@ -217,7 +245,33 @@ const ChatMessage = ({ message, formatMoney }) => {
   );
 };
 
-const ChatProductCard = ({ product, formatMoney }) => {
+const ContactDetail = ({ detail }) => {
+  const href =
+    detail.kind === "email"
+      ? `mailto:${detail.value}`
+      : detail.kind === "phone"
+        ? `tel:${detail.value.replace(/[^\d+]/g, "")}`
+        : null;
+
+  return (
+    <div className="py-2 first:pt-3 last:pb-0">
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-400">
+        {detail.label}
+      </dt>
+      <dd className="mt-0.5 break-words text-sm font-medium text-stone-800">
+        {href ? (
+          <a className="underline decoration-stone-300 underline-offset-2 hover:text-stone-950" href={href}>
+            {detail.value}
+          </a>
+        ) : (
+          detail.value
+        )}
+      </dd>
+    </div>
+  );
+};
+
+const ChatProductCard = ({ product, formatMoney, reason }) => {
   const image = product.image || product.images?.[0];
 
   return (
@@ -240,6 +294,7 @@ const ChatProductCard = ({ product, formatMoney }) => {
         <p className="mt-2 text-sm font-semibold text-stone-950">
           {formatMoney ? formatMoney(product.price) : `RM${product.price}`}
         </p>
+        {reason ? <p className="mt-1 text-xs leading-5 text-stone-600">{reason}</p> : null}
       </div>
     </Link>
   );

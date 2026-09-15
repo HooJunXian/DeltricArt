@@ -5,6 +5,8 @@ from django.db.models import Q
 
 from api.models import Order, Product
 
+from .embeddings import EmbeddingUnavailableError, semantic_product_ids
+
 
 SCENARIO_KEYWORDS = {
     "gift": ["gift", "present", "送礼", "礼物", "生日", "birthday", "anniversary", "housewarming", "新家"],
@@ -69,21 +71,28 @@ def search_products(message, limit=8):
         queryset = queryset.filter(price__lte=budget)
 
     query = build_product_query(message, scenarios)
-    if query:
-        queryset = queryset.filter(query)
-
-    products = list(queryset.order_by("price", "name")[:limit])
-    if products or not query:
-        return products
-
-    fallback = Product.objects.filter(is_show=True, stock_balance__gt=0)
-    if budget is not None:
-        fallback = fallback.filter(price__lte=budget)
-    return list(
-        fallback.select_related("category", "category__parent")
-        .prefetch_related("images")
-        .order_by("price", "name")[:limit]
+    keyword_products = list(
+        (queryset.filter(query) if query else queryset).order_by("price", "name")[:limit]
     )
+
+    try:
+        semantic_ids = semantic_product_ids(message, queryset)
+    except EmbeddingUnavailableError:
+        semantic_ids = []
+
+    if not semantic_ids:
+        if keyword_products:
+            return keyword_products
+        return list(queryset.order_by("price", "name")[:limit])
+
+    products_by_id = {
+        product.id: product
+        for product in queryset.filter(id__in=semantic_ids)
+    }
+    ranked = [products_by_id[product_id] for product_id in semantic_ids if product_id in products_by_id]
+    seen = set(semantic_ids)
+    ranked.extend(product for product in keyword_products if product.id not in seen)
+    return ranked[:limit]
 
 
 def build_product_query(message, scenarios):

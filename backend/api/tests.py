@@ -10,7 +10,7 @@ from decimal import Decimal
 import hashlib
 import hmac
 import json
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.parse import urlparse
 from rest_framework.test import APIClient
 
@@ -26,12 +26,17 @@ from .models import (
     Postcode,
     Product,
     ProductCategory,
+    ProductEmbedding,
     ProductImage,
     RoomCustomization,
     RoomCustomizationProduct,
 )
 from .services import build_billplz_signature
 from .signals import SUPERADMIN_USERNAME
+from .chatbot.ai_client import ModelUnavailableError
+from .chatbot.embeddings import semantic_product_ids
+from .chatbot.history import get_recent_messages
+from .chatbot.schemas import ChatbotAnswer, ProductRecommendation
 
 
 User = get_user_model()
@@ -1270,9 +1275,23 @@ class ChatbotApiTests(TestCase):
         self.assertFalse(ChatbotConversation.objects.exists())
         self.assertFalse(ChatbotMessage.objects.exists())
 
-    @patch("api.views.chatbot.ask_ollama")
-    def test_chatbot_returns_ai_reply_and_matching_products(self, ask_ollama_mock):
-        ask_ollama_mock.return_value = "Living Room Oil Painting 适合客厅，也符合 RM300 以下的预算。"
+    @patch("api.chatbot.workflow.generate_chat_response")
+    def test_chatbot_returns_ai_reply_and_matching_products(self, generate_mock):
+        expected_reply = "Living Room Oil Painting 适合客厅，也符合 RM300 以下的预算。"
+        generate_mock.return_value = (
+            ChatbotAnswer(
+                response_type="recommendation",
+                language="zh-CN",
+                summary=expected_reply,
+                recommendations=[
+                    ProductRecommendation(
+                        product_id=self.product.id,
+                        reason="适合客厅且在预算内。",
+                    )
+                ],
+            ),
+            "ollama",
+        )
         self.client.force_authenticate(user=self.user)
 
         response = self.client.post(
@@ -1282,7 +1301,9 @@ class ChatbotApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["reply"], ask_ollama_mock.return_value)
+        self.assertEqual(response.data["reply"], expected_reply)
+        self.assertEqual(response.data["answer"]["response_type"], "recommendation")
+        self.assertEqual(response.data["provider"], "ollama")
         self.assertIn("conversation_id", response.data)
         self.assertEqual(len(response.data["products"]), 1)
         self.assertEqual(response.data["products"][0]["id"], self.product.id)
@@ -1292,11 +1313,12 @@ class ChatbotApiTests(TestCase):
         self.assertEqual(messages[0].role, ChatbotMessage.ROLE_USER)
         self.assertEqual(messages[0].content, "推荐 RM300 以下适合客厅的画")
         self.assertEqual(messages[1].role, ChatbotMessage.ROLE_ASSISTANT)
-        self.assertEqual(messages[1].content, ask_ollama_mock.return_value)
+        self.assertEqual(messages[1].content, expected_reply)
         self.assertEqual(messages[1].products_snapshot[0]["id"], self.product.id)
+        self.assertEqual(messages[1].metadata["provider"], "ollama")
 
-    @patch("api.views.chatbot.ask_ollama")
-    def test_chatbot_only_returns_product_cards_mentioned_in_reply(self, ask_ollama_mock):
+    @patch("api.chatbot.workflow.generate_chat_response")
+    def test_chatbot_only_returns_products_selected_by_structured_id(self, generate_mock):
         extra_product = Product.objects.create(
             code="ART-CHAT-002",
             name="Lonely",
@@ -1309,7 +1331,20 @@ class ChatbotApiTests(TestCase):
             show_date_end=timezone.now() + timedelta(days=365),
             created_by=self.staff_user,
         )
-        ask_ollama_mock.return_value = "I recommend Living Room Oil Painting for this room."
+        generate_mock.return_value = (
+            ChatbotAnswer(
+                response_type="recommendation",
+                language="en",
+                summary="I found a suitable option for this room.",
+                recommendations=[
+                    ProductRecommendation(
+                        product_id=self.product.id,
+                        reason="Its warm style suits a living room.",
+                    )
+                ],
+            ),
+            "gemini",
+        )
         self.client.force_authenticate(user=self.user)
 
         response = self.client.post(
@@ -1325,8 +1360,8 @@ class ChatbotApiTests(TestCase):
         )
         self.assertNotIn(extra_product.id, [product["id"] for product in response.data["products"]])
 
-    @patch("api.views.chatbot.ask_ollama")
-    def test_chatbot_greeting_does_not_return_products(self, ask_ollama_mock):
+    @patch("api.chatbot.workflow.generate_chat_response")
+    def test_chatbot_greeting_does_not_return_products(self, generate_mock):
         self.client.force_authenticate(user=self.user)
 
         response = self.client.post(
@@ -1338,12 +1373,20 @@ class ChatbotApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("DeltricArt", response.data["reply"])
         self.assertEqual(response.data["products"], [])
-        ask_ollama_mock.assert_not_called()
+        generate_mock.assert_not_called()
         self.assertEqual(ChatbotMessage.objects.count(), 2)
 
-    @patch("api.views.chatbot.ask_ollama")
-    def test_chatbot_accepts_style_follow_up_requests(self, ask_ollama_mock):
-        ask_ollama_mock.return_value = "现代简约风格可以考虑线条干净、色彩克制的作品。"
+    @patch("api.chatbot.workflow.generate_chat_response")
+    def test_chatbot_accepts_style_follow_up_requests(self, generate_mock):
+        expected_reply = "现代简约风格可以考虑线条干净、色彩克制的作品。"
+        generate_mock.return_value = (
+            ChatbotAnswer(
+                response_type="product_qa",
+                language="zh-CN",
+                summary=expected_reply,
+            ),
+            "ollama",
+        )
         self.client.force_authenticate(user=self.user)
 
         response = self.client.post(
@@ -1353,11 +1396,14 @@ class ChatbotApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["reply"], ask_ollama_mock.return_value)
-        ask_ollama_mock.assert_called_once()
+        self.assertEqual(response.data["reply"], expected_reply)
+        generate_mock.assert_called_once()
 
-    @patch("api.views.chatbot.ask_ollama", side_effect=RuntimeError("Unable to reach Ollama."))
-    def test_chatbot_returns_service_error_when_ollama_is_unavailable(self, _ask_ollama_mock):
+    @patch(
+        "api.chatbot.workflow.generate_chat_response",
+        side_effect=ModelUnavailableError("No provider available."),
+    )
+    def test_chatbot_returns_service_error_when_model_is_unavailable(self, _generate_mock):
         self.client.force_authenticate(user=self.user)
 
         response = self.client.post(
@@ -1376,8 +1422,8 @@ class ChatbotApiTests(TestCase):
         ).latest("id")
         self.assertEqual(assistant_message.metadata["error"], "ai_unavailable")
 
-    @patch("api.views.chatbot.ask_ollama")
-    def test_chatbot_rejects_out_of_scope_request_without_calling_ollama(self, ask_ollama_mock):
+    @patch("api.chatbot.workflow.generate_chat_response")
+    def test_chatbot_rejects_out_of_scope_request_without_calling_model(self, generate_mock):
         self.client.force_authenticate(user=self.user)
 
         response = self.client.post(
@@ -1389,11 +1435,11 @@ class ChatbotApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("outside the scope", response.data["reply"])
         self.assertEqual(response.data["products"], [])
-        ask_ollama_mock.assert_not_called()
+        generate_mock.assert_not_called()
         self.assertEqual(ChatbotMessage.objects.count(), 2)
 
-    @patch("api.views.chatbot.ask_ollama")
-    def test_chatbot_rejects_chinese_out_of_scope_request_without_calling_ollama(self, ask_ollama_mock):
+    @patch("api.chatbot.workflow.generate_chat_response")
+    def test_chatbot_rejects_chinese_out_of_scope_request_without_calling_model(self, generate_mock):
         self.client.force_authenticate(user=self.user)
 
         response = self.client.post(
@@ -1403,7 +1449,384 @@ class ChatbotApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("不在 DeltricArt AI 购物助手的能力范围", response.data["reply"])
+        self.assertIn("不在 Della（DeltricArt AI 购物助手）的能力范围", response.data["reply"])
         self.assertEqual(response.data["products"], [])
-        ask_ollama_mock.assert_not_called()
+        generate_mock.assert_not_called()
         self.assertEqual(ChatbotMessage.objects.count(), 2)
+
+    @patch("api.chatbot.workflow.generate_chat_response")
+    def test_chatbot_replies_politely_to_courtesy_messages(self, generate_mock):
+        cases = [
+            ("thank you", "You're very welcome", "en"),
+            ("谢谢", "不客气", "zh-CN"),
+            ("terima kasih", "Sama-sama", "ms"),
+        ]
+
+        for message, expected_reply, expected_language in cases:
+            with self.subTest(message=message):
+                response = self.client.post(
+                    "/api/chatbot/",
+                    {"message": message},
+                    format="json",
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(expected_reply, response.data["reply"])
+                self.assertEqual(response.data["answer"]["response_type"], "courtesy")
+                self.assertEqual(response.data["answer"]["language"], expected_language)
+                self.assertEqual(response.data["provider"], "deterministic")
+                self.assertEqual(response.data["products"], [])
+
+        generate_mock.assert_not_called()
+
+    @patch("api.chatbot.workflow.generate_chat_response")
+    def test_chatbot_returns_company_address_from_company_settings(self, generate_mock):
+        Company.objects.create(
+            cName="Deltric Art",
+            cAddress1="12 Gallery Road",
+            cAddress2="Art District",
+            cPostcode="50000",
+            cCity="Kuala Lumpur",
+            cState="Wilayah Persekutuan",
+            cOfficeEmail="hello@deltric.example",
+            cOfficeNo="03-1234 5678",
+        )
+
+        response = self.client.post(
+            "/api/chatbot/",
+            {"message": "I want the address of Deltric Art"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("12 Gallery Road", response.data["reply"])
+        self.assertIn("Kuala Lumpur", response.data["reply"])
+        self.assertNotIn("hello@deltric.example", response.data["reply"])
+        self.assertEqual(response.data["answer"]["response_type"], "company_contact")
+        self.assertEqual(response.data["provider"], "deterministic")
+        self.assertEqual(response.data["products"], [])
+        generate_mock.assert_not_called()
+
+    @patch("api.chatbot.workflow.generate_chat_response")
+    def test_chatbot_returns_all_available_company_contact_details(self, generate_mock):
+        Company.objects.create(
+            cName="Deltric Art",
+            cAddress1="12 Gallery Road",
+            cPostcode="50000",
+            cCity="Kuala Lumpur",
+            cOfficeEmail="hello@deltric.example",
+            cOfficeNo="03-1234 5678",
+            cOfficeTelNo="012-345 6789",
+        )
+
+        response = self.client.post(
+            "/api/chatbot/",
+            {"message": "How can I contact Deltric Art?"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("12 Gallery Road", response.data["reply"])
+        self.assertIn("hello@deltric.example", response.data["reply"])
+        self.assertIn("03-1234 5678", response.data["reply"])
+        self.assertIn("012-345 6789", response.data["reply"])
+        self.assertEqual(
+            response.data["answer"]["details"],
+            [
+                {
+                    "label": "Address",
+                    "value": "12 Gallery Road, 50000 Kuala Lumpur",
+                    "kind": "address",
+                },
+                {
+                    "label": "Office email",
+                    "value": "hello@deltric.example",
+                    "kind": "email",
+                },
+                {
+                    "label": "Office phone",
+                    "value": "03-1234 5678",
+                    "kind": "phone",
+                },
+                {
+                    "label": "Office mobile",
+                    "value": "012-345 6789",
+                    "kind": "phone",
+                },
+            ],
+        )
+        generate_mock.assert_not_called()
+
+    @patch("api.chatbot.workflow.generate_chat_response")
+    def test_chatbot_handles_missing_company_contact_details_politely(self, generate_mock):
+        response = self.client.post(
+            "/api/chatbot/",
+            {"message": "What is your company email?"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("not available yet", response.data["reply"])
+        self.assertEqual(response.data["answer"]["response_type"], "company_contact")
+        generate_mock.assert_not_called()
+
+    @patch("api.chatbot.workflow.generate_chat_response")
+    def test_chatbot_includes_recent_messages_in_follow_up_prompt(self, generate_mock):
+        generate_mock.side_effect = [
+            (
+                ChatbotAnswer(
+                    response_type="product_qa",
+                    language="en",
+                    summary="The painting costs RM280.",
+                ),
+                "gemini",
+            ),
+            (
+                ChatbotAnswer(
+                    response_type="product_qa",
+                    language="en",
+                    summary="It is suitable for a living room.",
+                ),
+                "gemini",
+            ),
+        ]
+        self.client.force_authenticate(user=self.user)
+
+        first_response = self.client.post(
+            "/api/chatbot/",
+            {"message": "How much is the painting?"},
+            format="json",
+        )
+        second_response = self.client.post(
+            "/api/chatbot/",
+            {
+                "message": "Is it suitable for a living room?",
+                "conversation_id": first_response.data["conversation_id"],
+            },
+            format="json",
+        )
+
+        self.assertEqual(second_response.status_code, 200)
+        second_messages = generate_mock.call_args_list[1].args[0]
+        self.assertEqual(second_messages[-3]["role"], "user")
+        self.assertEqual(second_messages[-3]["content"], "How much is the painting?")
+        self.assertEqual(second_messages[-2]["role"], "assistant")
+        self.assertEqual(second_messages[-2]["content"], "The painting costs RM280.")
+        self.assertEqual(second_messages[-1]["content"], "Is it suitable for a living room?")
+        self.assertEqual(ChatbotConversation.objects.count(), 1)
+        self.assertEqual(ChatbotMessage.objects.count(), 4)
+
+    @patch("api.chatbot.workflow.generate_chat_response")
+    def test_active_conversation_is_reused_and_idle_expiry_is_extended(self, generate_mock):
+        generate_mock.return_value = (
+            ChatbotAnswer(
+                response_type="product_qa",
+                language="en",
+                summary="Here is the requested product information.",
+            ),
+            "gemini",
+        )
+        self.client.force_authenticate(user=self.user)
+        first_response = self.client.post(
+            "/api/chatbot/",
+            {"message": "Tell me about the painting"},
+            format="json",
+        )
+        conversation_id = first_response.data["conversation_id"]
+        ChatbotConversation.objects.filter(pk=conversation_id).update(
+            expires_at=timezone.now() + timedelta(minutes=5)
+        )
+
+        second_response = self.client.post(
+            "/api/chatbot/",
+            {
+                "message": "What size is it?",
+                "conversation_id": conversation_id,
+            },
+            format="json",
+        )
+
+        conversation = ChatbotConversation.objects.get(pk=conversation_id)
+        self.assertEqual(second_response.data["conversation_id"], conversation_id)
+        self.assertFalse(second_response.data["conversation_was_reset"])
+        self.assertEqual(conversation.status, ChatbotConversation.STATUS_ACTIVE)
+        self.assertGreater(
+            conversation.expires_at,
+            timezone.now() + timedelta(minutes=59),
+        )
+
+    @patch("api.chatbot.workflow.generate_chat_response")
+    def test_expired_conversation_is_closed_and_replaced(self, generate_mock):
+        generate_mock.return_value = (
+            ChatbotAnswer(
+                response_type="product_qa",
+                language="en",
+                summary="Here is the requested product information.",
+            ),
+            "gemini",
+        )
+        self.client.force_authenticate(user=self.user)
+        first_response = self.client.post(
+            "/api/chatbot/",
+            {"message": "Tell me about the painting"},
+            format="json",
+        )
+        expired_id = first_response.data["conversation_id"]
+        ChatbotConversation.objects.filter(pk=expired_id).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+
+        second_response = self.client.post(
+            "/api/chatbot/",
+            {
+                "message": "Show me another option",
+                "conversation_id": expired_id,
+            },
+            format="json",
+        )
+
+        self.assertNotEqual(second_response.data["conversation_id"], expired_id)
+        self.assertTrue(second_response.data["conversation_was_reset"])
+        self.assertEqual(
+            ChatbotConversation.objects.get(pk=expired_id).status,
+            ChatbotConversation.STATUS_EXPIRED,
+        )
+        self.assertEqual(ChatbotConversation.objects.count(), 2)
+
+    def test_recent_history_contains_eight_complete_turns(self):
+        conversation = ChatbotConversation.objects.create(
+            user=self.user,
+            title="History limit",
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+        for index in range(9):
+            ChatbotMessage.objects.create(
+                conversation=conversation,
+                role=ChatbotMessage.ROLE_USER,
+                content=f"User prompt {index}",
+            )
+            ChatbotMessage.objects.create(
+                conversation=conversation,
+                role=ChatbotMessage.ROLE_ASSISTANT,
+                content=f"Assistant answer {index}",
+            )
+
+        history = get_recent_messages(conversation, turn_limit=8)
+
+        self.assertEqual(len(history), 16)
+        self.assertEqual(history[0]["content"], "User prompt 1")
+        self.assertEqual(history[-1]["content"], "Assistant answer 8")
+
+    def test_internal_product_ids_are_hidden_from_visible_answer_text(self):
+        answer = ChatbotAnswer(
+            response_type="recommendation",
+            language="zh-CN",
+            summary="您选择的《扭曲雕塑》（ID：1）是大型装置艺术。",
+            recommendations=[
+                ProductRecommendation(
+                    product_id=1,
+                    reason="Product ID: 1 很适合成为空间焦点。",
+                )
+            ],
+            follow_up_question="需要比较商品 ID #2 吗？",
+        )
+
+        self.assertNotIn("ID", answer.render_text().upper())
+        self.assertNotIn("ID", answer.recommendations[0].reason.upper())
+        self.assertEqual(answer.recommendations[0].product_id, 1)
+
+    @patch("api.chatbot.workflow.generate_chat_response")
+    def test_chatbot_discards_product_ids_outside_retrieved_context(self, generate_mock):
+        generate_mock.return_value = (
+            ChatbotAnswer(
+                response_type="recommendation",
+                language="en",
+                summary="I found one option.",
+                recommendations=[
+                    ProductRecommendation(product_id=999999, reason="Invented product")
+                ],
+            ),
+            "gemini",
+        )
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            "/api/chatbot/",
+            {"message": "recommend a painting"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["products"], [])
+        self.assertEqual(response.data["answer"]["recommendations"], [])
+
+
+class ProductEmbeddingSearchTests(TestCase):
+    def setUp(self):
+        self.staff_user = User.objects.create_user(
+            username="embeddingstaff",
+            email="embeddingstaff@example.com",
+            password="Secret123!",
+            is_staff=True,
+        )
+        self.category = ProductCategory.objects.create(
+            name="Painting",
+            created_by=self.staff_user,
+        )
+        now = timezone.now()
+        self.first_product = Product.objects.create(
+            name="Blue Calm",
+            description="Quiet blue abstract artwork.",
+            price=Decimal("300.00"),
+            stock_balance=1,
+            category=self.category,
+            is_show=True,
+            show_date_start=now,
+            show_date_end=now + timedelta(days=365),
+            created_by=self.staff_user,
+        )
+        self.second_product = Product.objects.create(
+            name="Red Motion",
+            description="Energetic red figurative artwork.",
+            price=Decimal("350.00"),
+            stock_balance=1,
+            category=self.category,
+            is_show=True,
+            show_date_start=now,
+            show_date_end=now + timedelta(days=365),
+            created_by=self.staff_user,
+        )
+        ProductEmbedding.objects.create(
+            product=self.first_product,
+            embedding=[1.0, 0.0, 0.0],
+            dimensions=3,
+            model_name="test-embedding",
+            content_hash="first",
+        )
+        ProductEmbedding.objects.create(
+            product=self.second_product,
+            embedding=[0.0, 1.0, 0.0],
+            dimensions=3,
+            model_name="test-embedding",
+            content_hash="second",
+        )
+
+    @override_settings(
+        CHATBOT_EMBEDDING_ENABLED=True,
+        OLLAMA_EMBEDDING_MODEL="test-embedding",
+        CHATBOT_EMBEDDING_DIMENSIONS=3,
+        CHATBOT_SEMANTIC_MIN_SCORE=0,
+    )
+    @patch("api.chatbot.embeddings.get_embedding_model")
+    def test_semantic_search_ranks_products_by_cosine_similarity(self, get_model_mock):
+        embedding_model = Mock()
+        embedding_model.embed_query.return_value = [0.9, 0.1, 0.0]
+        get_model_mock.return_value = embedding_model
+
+        product_ids = semantic_product_ids(
+            "calm artwork",
+            Product.objects.all(),
+            limit=2,
+        )
+
+        self.assertEqual(product_ids, [self.first_product.id, self.second_product.id])
